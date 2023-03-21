@@ -9,7 +9,7 @@ pub fn KWayMergeIterator(
     comptime Context: type,
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
+    comptime key_from_value: fn (*const Value) callconv(.Inline) @import("ref.zig").Return(Key, Value),
     comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
     comptime k_max: u32,
     /// Peek the next key in the stream identified by stream_index.

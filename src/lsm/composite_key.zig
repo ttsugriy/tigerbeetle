@@ -42,7 +42,7 @@ pub fn CompositeKey(comptime Field: type) type {
             assert(@sizeOf(Self) * 8 == @bitSizeOf(Self));
         }
 
-        pub inline fn compare_keys(a: Self, b: Self) math.Order {
+        pub inline fn compare_keys(a: *const Self, b: *const Self) math.Order {
             if (a.field < b.field) {
                 return .lt;
             } else if (a.field > b.field) {
@@ -57,6 +57,7 @@ pub fn CompositeKey(comptime Field: type) type {
         }
 
         pub inline fn key_from_value(value: *const Value) Self {
+            // PENDING: CANNOT return byref.
             return .{
                 .field = value.field,
                 .timestamp = @truncate(u63, value.timestamp),
@@ -67,7 +68,7 @@ pub fn CompositeKey(comptime Field: type) type {
             return (value.timestamp & tombstone_bit) != 0;
         }
 
-        pub inline fn tombstone_from_key(key: Self) Value {
+        pub inline fn tombstone_from_key(key: *const Self) Value {
             return .{
                 .field = key.field,
                 .timestamp = key.timestamp | tombstone_bit,

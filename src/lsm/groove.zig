@@ -20,12 +20,13 @@ fn ObjectTreeHelpers(comptime Object: type) type {
     assert(std.meta.fieldInfo(Object, .timestamp).field_type == u64);
 
     return struct {
-        inline fn compare_keys(timestamp_a: u64, timestamp_b: u64) std.math.Order {
-            return std.math.order(timestamp_a, timestamp_b);
+        inline fn compare_keys(a: *const u64, b: *const u64) std.math.Order {
+            return std.math.order(a.*, b.*);
         }
 
         inline fn key_from_value(value: *const Object) u64 {
-            return value.timestamp & ~@as(u64, tombstone_bit);
+            // PENDING: CANNOT return byref.
+            return (value.timestamp & ~@as(u64, tombstone_bit));
         }
 
         const sentinel_key = std.math.maxInt(u64);
@@ -35,9 +36,9 @@ fn ObjectTreeHelpers(comptime Object: type) type {
             return (value.timestamp & tombstone_bit) != 0;
         }
 
-        inline fn tombstone_from_key(timestamp: u64) Object {
+        inline fn tombstone_from_key(timestamp: *const u64) Object {
             var value = std.mem.zeroes(Object); // Full zero-initialized Value.
-            value.timestamp = timestamp | tombstone_bit;
+            value.timestamp = timestamp.* | tombstone_bit;
             return value;
         }
     };
@@ -54,11 +55,12 @@ const IdTreeValue = extern struct {
         assert(@bitSizeOf(IdTreeValue) == 32 * 8);
     }
 
-    inline fn compare_keys(a: u128, b: u128) std.math.Order {
-        return std.math.order(a, b);
+    inline fn compare_keys(a: *const u128, b: *const u128) std.math.Order {
+        return std.math.order(a.*, b.*);
     }
 
     inline fn key_from_value(value: *const IdTreeValue) u128 {
+        // PENDING: CAN return byref.
         return value.id;
     }
 
@@ -69,9 +71,9 @@ const IdTreeValue = extern struct {
         return (value.timestamp & tombstone_bit) != 0;
     }
 
-    inline fn tombstone_from_key(id: u128) IdTreeValue {
+    inline fn tombstone_from_key(id: *const u128) IdTreeValue {
         return .{
-            .id = id,
+            .id = id.*,
             .timestamp = tombstone_bit,
         };
     }
@@ -573,9 +575,9 @@ pub fn GrooveType(
         /// This must be called by the state machine for every key to be prefetched.
         /// We tolerate duplicate IDs enqueued by the state machine.
         /// For example, if all unique operations require the same two dependencies.
-        pub fn prefetch_enqueue(groove: *Groove, key: PrimaryKey) void {
+        pub fn prefetch_enqueue(groove: *Groove, key: *const PrimaryKey) void {
             if (!has_id) {
-                groove.prefetch_ids.putAssumeCapacity(key, {});
+                groove.prefetch_ids.putAssumeCapacity(key.*, {});
                 return;
             }
 
@@ -585,19 +587,19 @@ pub fn GrooveType(
                 } else {
                     if (groove.objects.lookup_from_memory(
                         groove.prefetch_snapshot.?,
-                        id_tree_value.timestamp,
+                        &id_tree_value.timestamp,
                     )) |object| {
                         assert(!ObjectTreeHelpers(Object).tombstone(object));
-                        assert(object.id == key);
+                        assert(object.id == key.*);
                         groove.prefetch_objects.putAssumeCapacity(object.*, {});
                     } else {
                         // The id was in the IdTree's value cache, but not in the ObjectTree's
                         // value cache.
-                        groove.prefetch_ids.putAssumeCapacity(key, {});
+                        groove.prefetch_ids.putAssumeCapacity(key.*, {});
                     }
                 }
             } else {
-                groove.prefetch_ids.putAssumeCapacity(key, {});
+                groove.prefetch_ids.putAssumeCapacity(key.*, {});
             }
         }
 
@@ -690,7 +692,7 @@ pub fn GrooveType(
 
                 if (worker.context.groove.ids.lookup_from_memory(
                     worker.context.snapshot,
-                    id.*,
+                    id,
                 )) |id_tree_value| {
                     assert(!id_tree_value.tombstone());
                     lookup_id_callback(&worker.lookup_id, id_tree_value);
@@ -700,7 +702,7 @@ pub fn GrooveType(
                         // was not also cached.
                         assert(worker.context.groove.objects.lookup_from_memory(
                             worker.context.snapshot,
-                            id_tree_value.timestamp,
+                            &id_tree_value.timestamp,
                         ) == null);
                     }
                 } else {
@@ -748,7 +750,7 @@ pub fn GrooveType(
             fn lookup_with_timestamp(worker: *PrefetchWorker, timestamp: u64) void {
                 if (worker.context.groove.objects.lookup_from_memory(
                     worker.context.snapshot,
-                    timestamp,
+                    &timestamp,
                 )) |object| {
                     // The object is not a tombstone; the ID (if any) and Object trees are in sync.
                     assert(!ObjectTreeHelpers(Object).tombstone(object));

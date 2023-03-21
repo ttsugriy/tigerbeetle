@@ -84,7 +84,7 @@ pub fn MergeIteratorType(
                     },
                 };
 
-                switch (Table.compare_keys(key_a, key_b)) {
+                switch (Table.compare_keys(&key_a, &key_b)) {
                     .lt => return it.iterator_a.pop(),
                     .gt => return it.iterator_b.pop(),
                     .eq => {

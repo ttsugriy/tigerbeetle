@@ -85,8 +85,8 @@ pub fn main() !void {
             ),
             Key,
             struct {
-                inline fn key_from_value(value: *const Value) Key {
-                    return value.key;
+                inline fn key_from_value(value: *const Value) *const Key {
+                    return &value.key;
                 }
             }.key_from_value,
             struct {

@@ -95,8 +95,8 @@ pub fn TableInfoType(comptime Table: type) type {
                 table.flags == other.flags and
                 table.snapshot_min == other.snapshot_min and
                 table.snapshot_max == other.snapshot_max and
-                compare_keys(table.key_min, other.key_min) == .eq and
-                compare_keys(table.key_max, other.key_max) == .eq;
+                compare_keys(&table.key_min, &other.key_min) == .eq and
+                compare_keys(&table.key_max, &other.key_max) == .eq;
         }
     };
 }
@@ -270,7 +270,7 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
             key_max: Key,
         ) void {
             assert(level < constants.lsm_levels);
-            assert(compare_keys(key_min, key_max) != .gt);
+            assert(compare_keys(&key_min, &key_max) != .gt);
 
             // Remove tables in descending order to avoid desynchronizing the iterator from
             // the ManifestLevel.
@@ -287,8 +287,8 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
 
             while (it.next()) |table| {
                 assert(table.invisible(&snapshots));
-                assert(compare_keys(key_min, table.key_max) != .gt);
-                assert(compare_keys(key_max, table.key_min) != .lt);
+                assert(compare_keys(&key_min, &table.key_max) != .gt);
+                assert(compare_keys(&key_max, &table.key_min) != .lt);
 
                 // Append remove changes to the manifest log and purge from memory (ManifestLevel):
                 manifest.manifest_log.remove(@intCast(u7, level), table);
@@ -327,8 +327,8 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
 
                     if (inner.next()) |table| {
                         assert(table.visible(it.snapshot));
-                        assert(compare_keys(it.key, table.key_min) != .lt);
-                        assert(compare_keys(it.key, table.key_max) != .gt);
+                        assert(compare_keys(&it.key, &table.key_min) != .lt);
+                        assert(compare_keys(&it.key, &table.key_max) != .gt);
                         assert(inner.next() == null);
 
                         it.level += 1;
@@ -382,7 +382,7 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
             direction: Direction,
         ) ?*const TableInfo {
             assert(level < constants.lsm_levels);
-            assert(compare_keys(key_min, key_max) != .gt);
+            assert(compare_keys(&key_min, &key_max) != .gt);
 
             const snapshots = [_]u64{snapshot};
 
@@ -395,12 +395,12 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
                 ).next();
             }
 
-            assert(compare_keys(key_exclusive.?, key_min) != .lt);
-            assert(compare_keys(key_exclusive.?, key_max) != .gt);
+            assert(compare_keys(&key_exclusive.?, &key_min) != .lt);
+            assert(compare_keys(&key_exclusive.?, &key_max) != .gt);
 
             const key_min_exclusive = if (direction == .ascending) key_exclusive.? else key_min;
             const key_max_exclusive = if (direction == .descending) key_exclusive.? else key_max;
-            assert(compare_keys(key_min_exclusive, key_max_exclusive) != .gt);
+            assert(compare_keys(&key_min_exclusive, &key_max_exclusive) != .gt);
 
             var it = manifest.levels[level].iterator(
                 .visible,
@@ -411,13 +411,13 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
 
             while (it.next()) |table| {
                 assert(table.visible(snapshot));
-                assert(compare_keys(table.key_min, table.key_max) != .gt);
-                assert(compare_keys(table.key_max, key_min_exclusive) != .lt);
-                assert(compare_keys(table.key_min, key_max_exclusive) != .gt);
+                assert(compare_keys(&table.key_min, &table.key_max) != .gt);
+                assert(compare_keys(&table.key_max, &key_min_exclusive) != .lt);
+                assert(compare_keys(&table.key_min, &key_max_exclusive) != .gt);
 
                 const next = switch (direction) {
-                    .ascending => compare_keys(table.key_min, key_exclusive.?) == .gt,
-                    .descending => compare_keys(table.key_max, key_exclusive.?) == .lt,
+                    .ascending => compare_keys(&table.key_min, &key_exclusive.?) == .gt,
+                    .descending => compare_keys(&table.key_max, &key_exclusive.?) == .lt,
                 };
                 if (next) return table;
             }
@@ -504,7 +504,7 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
             key_max: Key,
         ) CompactionRange {
             assert(level_b < constants.lsm_levels);
-            assert(compare_keys(key_min, key_max) != .gt);
+            assert(compare_keys(&key_min, &key_max) != .gt);
 
             var range = CompactionRange{
                 .table_count = 1,
@@ -522,25 +522,25 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
 
             while (it.next()) |table| : (range.table_count += 1) {
                 assert(table.visible(snapshot_latest));
-                assert(compare_keys(table.key_min, table.key_max) != .gt);
-                assert(compare_keys(table.key_max, range.key_min) != .lt);
-                assert(compare_keys(table.key_min, range.key_max) != .gt);
+                assert(compare_keys(&table.key_min, &table.key_max) != .gt);
+                assert(compare_keys(&table.key_max, &range.key_min) != .lt);
+                assert(compare_keys(&table.key_min, &range.key_max) != .gt);
 
                 // The first iterated table.key_min/max may overlap range.key_min/max entirely.
-                if (compare_keys(table.key_min, range.key_min) == .lt) {
+                if (compare_keys(&table.key_min, &range.key_min) == .lt) {
                     range.key_min = table.key_min;
                 }
 
                 // Thereafter, iterated tables may/may not extend the range in ascending order.
-                if (compare_keys(table.key_max, range.key_max) == .gt) {
+                if (compare_keys(&table.key_max, &range.key_max) == .gt) {
                     range.key_max = table.key_max;
                 }
             }
 
             assert(range.table_count > 0);
-            assert(compare_keys(range.key_min, range.key_max) != .gt);
-            assert(compare_keys(range.key_min, key_min) != .gt);
-            assert(compare_keys(range.key_max, key_max) != .lt);
+            assert(compare_keys(&range.key_min, &range.key_max) != .gt);
+            assert(compare_keys(&range.key_min, &key_min) != .gt);
+            assert(compare_keys(&range.key_max, &key_max) != .lt);
 
             return range;
         }
@@ -553,7 +553,7 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
         ) bool {
             assert(level_b < constants.lsm_levels);
             assert(range.table_count > 0);
-            assert(compare_keys(range.key_min, range.key_max) != .gt);
+            assert(compare_keys(&range.key_min, &range.key_max) != .gt);
 
             var level_c: u8 = level_b + 1;
             while (level_c < constants.lsm_levels) : (level_c += 1) {
@@ -631,10 +631,10 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
                 );
                 while (table_info_iter.next()) |table_info| {
                     if (key_max_prev) |k| {
-                        assert(compare_keys(k, table_info.key_min) == .lt);
+                        assert(compare_keys(&k, &table_info.key_min) == .lt);
                     }
                     // We could have key_min == key_max if there is only one value.
-                    assert(compare_keys(table_info.key_min, table_info.key_max) != .gt);
+                    assert(compare_keys(&table_info.key_min, &table_info.key_max) != .gt);
                     key_max_prev = table_info.key_max;
 
                     Table.verify(

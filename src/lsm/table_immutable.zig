@@ -91,7 +91,7 @@ pub fn TableImmutableType(comptime Table: type) type {
                     assert(i > 0);
                     const left_key = key_from_value(&sorted_values[i - 1]);
                     const right_key = key_from_value(&sorted_values[i]);
-                    assert(compare_keys(left_key, right_key) == .lt);
+                    assert(compare_keys(&left_key, &right_key) == .lt);
                 }
             }
 
@@ -103,13 +103,14 @@ pub fn TableImmutableType(comptime Table: type) type {
         }
 
         // TODO(ifreund) This would be great to unit test.
-        pub fn get(table: *const TableImmutable, key: Key) ?*const Value {
+        pub fn get(table: *const TableImmutable, key: *const Key) ?*const Value {
             assert(!table.free);
 
             const result = binary_search.binary_search_values(
                 Key,
                 Value,
                 key_from_value,
+
                 compare_keys,
                 table.values,
                 key,
@@ -117,7 +118,7 @@ pub fn TableImmutableType(comptime Table: type) type {
             );
             if (result.exact) {
                 const value = &table.values[result.index];
-                if (constants.verify) assert(compare_keys(key, key_from_value(value)) == .eq);
+                if (constants.verify) assert(compare_keys(key, &key_from_value(value)) == .eq);
                 return value;
             }
 

@@ -16,7 +16,7 @@ pub fn ManifestLevelType(
     comptime NodePool: type,
     comptime Key: type,
     comptime TableInfo: type,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     comptime table_count_max: u32,
 ) type {
     return struct {
@@ -29,6 +29,7 @@ pub fn ManifestLevelType(
             Key,
             struct {
                 inline fn key_from_value(value: *const Key) Key {
+                    // PENDING: CAN return byref.
                     return value.*;
                 }
             }.key_from_value,
@@ -92,7 +93,7 @@ pub fn ManifestLevelType(
 
             const key_min = table.key_min;
             const key_max = table.key_max;
-            assert(compare_keys(key_min, key_max) != .gt);
+            assert(compare_keys(&key_min, &key_max) != .gt);
 
             var it = level.iterator(
                 .visible,
@@ -145,10 +146,10 @@ pub fn ManifestLevelType(
 
         fn remove_table(level: *Self, node_pool: *NodePool, table: *const TableInfo) void {
             assert(level.keys.len() == level.tables.len());
-            assert(compare_keys(table.key_min, table.key_max) != .gt);
+            assert(compare_keys(&table.key_min, &table.key_max) != .gt);
 
             // Use `key_min` for both ends of the iterator; we are looking for a single table.
-            const cursor_start = level.iterator_start(table.key_min, table.key_min, .ascending).?;
+            const cursor_start = level.iterator_start(&table.key_min, &table.key_min, .ascending).?;
             var absolute_index = level.keys.absolute_index_for_cursor(cursor_start);
 
             var it = level.tables.iterator_from_index(absolute_index, .ascending);
@@ -187,9 +188,9 @@ pub fn ManifestLevelType(
 
             const inner = blk: {
                 if (key_range) |range| {
-                    assert(compare_keys(range.key_min, range.key_max) != .gt);
+                    assert(compare_keys(&range.key_min, &range.key_max) != .gt);
 
-                    if (level.iterator_start(range.key_min, range.key_max, direction)) |start| {
+                    if (level.iterator_start(&range.key_min, &range.key_max, direction)) |start| {
                         break :blk level.tables.iterator_from_index(
                             level.keys.absolute_index_for_cursor(start),
                             direction,
@@ -257,10 +258,10 @@ pub fn ManifestLevelType(
                                 // We can assert this as it is exactly the same key comparison when
                                 // we binary search in iterator_start(), and since we move in
                                 // ascending order this remains true beyond the first iteration.
-                                assert(compare_keys(table.key_max, key_range.key_min) != .lt);
+                                assert(compare_keys(&table.key_max, &key_range.key_min) != .lt);
 
                                 // Check if the table is out of bounds to the right.
-                                if (compare_keys(table.key_min, key_range.key_max) == .gt) {
+                                if (compare_keys(&table.key_min, &key_range.key_max) == .gt) {
                                     it.inner.done = true;
                                     return null;
                                 }
@@ -273,12 +274,12 @@ pub fn ManifestLevelType(
                                 // first iteration as only the key_max of a table is stored in our
                                 // key nodes. On subsequent iterations this check will always
                                 // be false.
-                                if (compare_keys(table.key_min, key_range.key_max) == .gt) {
+                                if (compare_keys(&table.key_min, &key_range.key_max) == .gt) {
                                     continue;
                                 }
 
                                 // Check if the table is out of bounds to the left.
-                                if (compare_keys(table.key_max, key_range.key_min) == .lt) {
+                                if (compare_keys(&table.key_max, &key_range.key_min) == .lt) {
                                     it.inner.done = true;
                                     return null;
                                 }
@@ -303,8 +304,8 @@ pub fn ManifestLevelType(
         /// bound for the given direction is checked here.
         fn iterator_start(
             level: Self,
-            key_min: Key,
-            key_max: Key,
+            key_min: *const Key,
+            key_max: *const Key,
             direction: Direction,
         ) ?Keys.Cursor {
             assert(compare_keys(key_min, key_max) != .gt);
@@ -354,12 +355,12 @@ pub fn ManifestLevelType(
 
             // This cursor will always point to a key equal to start_key.
             var adjusted = reverse.cursor;
-            const start_key = reverse.next().?.*;
-            assert(compare_keys(start_key, level.keys.element_at_cursor(adjusted)) == .eq);
+            const start_key = reverse.next().?;
+            assert(compare_keys(start_key, &level.keys.element_at_cursor(adjusted)) == .eq);
 
             var adjusted_next = reverse.cursor;
             while (reverse.next()) |k| {
-                if (compare_keys(start_key, k.*) != .eq) break;
+                if (compare_keys(start_key, k) != .eq) break;
                 adjusted = adjusted_next;
                 adjusted_next = reverse.cursor;
             } else {
@@ -368,7 +369,7 @@ pub fn ManifestLevelType(
                     .descending => assert(meta.eql(adjusted, level.keys.last())),
                 }
             }
-            assert(compare_keys(start_key, level.keys.element_at_cursor(adjusted)) == .eq);
+            assert(compare_keys(start_key, &level.keys.element_at_cursor(adjusted)) == .eq);
 
             return adjusted;
         }
@@ -408,12 +409,12 @@ pub fn TestContext(
             tombstone: bool,
         };
 
-        inline fn compare_keys(a: Key, b: Key) math.Order {
-            return math.order(a, b);
+        inline fn compare_keys(a: *const Key, b: *const Key) math.Order {
+            return math.order(a.*, b.*);
         }
 
-        inline fn key_from_value(value: *const Value) Key {
-            return value.key;
+        inline fn key_from_value(value: *const Value) *const Key {
+            return &value.key;
         }
 
         inline fn tombstone_from_key(key: Key) Value {
@@ -428,6 +429,7 @@ pub fn TestContext(
             Key,
             Value,
             compare_keys,
+            compare_keys,
             key_from_value,
             std.math.maxInt(Key),
             tombstone,
@@ -440,7 +442,7 @@ pub fn TestContext(
         const NodePool = @import("node_pool.zig").NodePool;
 
         const TestPool = NodePool(node_size, @alignOf(TableInfo));
-        const TestLevel = ManifestLevelType(TestPool, Key, TableInfo, compare_keys, table_count_max);
+        const TestLevel = ManifestLevelType(TestPool, Key, TableInfo, compare_keys, compare_keys, table_count_max);
         const KeyRange = TestLevel.KeyRange;
 
         random: std.rand.Random,
@@ -549,6 +551,7 @@ pub fn TestContext(
                     TableInfo,
                     key_min_from_table,
                     compare_keys,
+                    compare_keys,
                     context.reference.items,
                     table.key_max,
                     .{},
@@ -568,12 +571,13 @@ pub fn TestContext(
         fn random_greater_non_overlapping_table(context: *Self, key: Key) TableInfo {
             var new_key_min = key + context.random.uintLessThanBiased(Key, 31) + 1;
 
-            assert(compare_keys(new_key_min, key) == .gt);
+            assert(compare_keys(&new_key_min, &key) == .gt);
 
             var i = binary_search.binary_search_values_raw(
                 Key,
                 TableInfo,
                 key_min_from_table,
+                compare_keys,
                 compare_keys,
                 context.reference.items,
                 new_key_min,
@@ -581,13 +585,13 @@ pub fn TestContext(
             );
 
             if (i > 0) {
-                if (compare_keys(new_key_min, context.reference.items[i - 1].key_max) != .gt) {
+                if (compare_keys(&new_key_min, &context.reference.items[i - 1].key_max) != .gt) {
                     new_key_min = context.reference.items[i - 1].key_max + 1;
                 }
             }
 
             const next_key_min = for (context.reference.items[i..]) |table| {
-                switch (compare_keys(new_key_min, table.key_min)) {
+                switch (compare_keys(&new_key_min, &table.key_min)) {
                     .lt => break table.key_min,
                     .eq => new_key_min = table.key_max + 1,
                     .gt => unreachable,

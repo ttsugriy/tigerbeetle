@@ -71,7 +71,7 @@ pub fn TableType(
     comptime TableKey: type,
     comptime TableValue: type,
     /// Returns the sort order between two keys.
-    comptime table_compare_keys: fn (TableKey, TableKey) callconv(.Inline) math.Order,
+    comptime table_compare_keys: fn (*const TableKey, *const TableKey) callconv(.Inline) math.Order,
     /// Returns the key for a value. For example, given `object` returns `object.id`.
     /// Since most objects contain an id, this avoids duplicating the key when storing the value.
     comptime table_key_from_value: fn (*const TableValue) callconv(.Inline) TableKey,
@@ -80,10 +80,10 @@ pub fn TableType(
     /// Returns whether a value is a tombstone value.
     comptime table_tombstone: fn (*const TableValue) callconv(.Inline) bool,
     /// Returns a tombstone value representation for a key.
-    comptime table_tombstone_from_key: fn (TableKey) callconv(.Inline) TableValue,
+    comptime table_tombstone_from_key: fn (*const TableKey) callconv(.Inline) TableValue,
     /// The maximum number of values per table.
     comptime table_value_count_max: usize,
-    comptime usage: TableUsage,
+    comptime usage_: TableUsage,
 ) type {
     return struct {
         const Table = @This();
@@ -97,12 +97,14 @@ pub fn TableType(
         pub const tombstone = table_tombstone;
         pub const tombstone_from_key = table_tombstone_from_key;
         pub const value_count_max = table_value_count_max;
-        pub const usage = usage;
+        pub const usage = usage_;
 
         // Export hashmap context for Key and Value
         pub const HashMapContextValue = struct {
             pub fn eql(_: HashMapContextValue, a: Value, b: Value) bool {
-                return compare_keys(key_from_value(&a), key_from_value(&b)) == .eq;
+                const ka = key_from_value(&a);
+                const kb = key_from_value(&b);
+                return compare_keys(&ka, &kb) == .eq;
             }
 
             pub fn hash(_: HashMapContextValue, value: Value) u64 {
@@ -547,7 +549,7 @@ pub fn TableType(
                 if (constants.verify) {
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a), key_from_value(b)) == .lt);
+                        assert(compare_keys(&key_from_value(a), &key_from_value(b)) == .lt);
                         a = b;
                     }
                 }
@@ -574,7 +576,7 @@ pub fn TableType(
 
                 const values_padding = mem.sliceAsBytes(values_max[builder.value..]);
                 const block_padding = block[data.padding_offset..][0..data.padding_size];
-                assert(compare_keys(key_from_value(&values[values.len - 1]), key_max) == .eq);
+                assert(compare_keys(&key_from_value(&values[values.len - 1]), &key_max) == .eq);
 
                 const header_bytes = block[0..@sizeOf(vsr.Header)];
                 const header = mem.bytesAsValue(vsr.Header, header_bytes);
@@ -600,14 +602,14 @@ pub fn TableType(
                 builder.key_max = key_max;
 
                 if (current == 0 and values.len == 1) {
-                    assert(compare_keys(builder.key_min, builder.key_max) == .eq);
+                    assert(compare_keys(&builder.key_min, &builder.key_max) == .eq);
                 } else {
-                    assert(compare_keys(builder.key_min, builder.key_max) == .lt);
+                    assert(compare_keys(&builder.key_min, &builder.key_max) == .lt);
                 }
 
                 if (current > 0) {
                     const key_max_prev = index_data_keys(builder.index_block)[current - 1];
-                    assert(compare_keys(key_max_prev, key_from_value(&values[0])) == .lt);
+                    assert(compare_keys(&key_max_prev, &key_from_value(&values[0])) == .lt);
                 }
 
                 builder.data_block_count += 1;
@@ -829,7 +831,7 @@ pub fn TableType(
 
         /// Returns the zero-based index of the data block that may contain the key.
         /// May be called on an index block only when the key is in range of the table.
-        inline fn index_data_block_for_key(index_block: BlockPtrConst, key: Key) u32 {
+        inline fn index_data_block_for_key(index_block: BlockPtrConst, key: *const Key) u32 {
             // Because we store key_max in the index block we can use the raw binary search
             // here and avoid the extra comparison. If the search finds an exact match, we
             // want to return that data block. If the search does not find an exact match
@@ -837,6 +839,7 @@ pub fn TableType(
             // data block that may contain the key.
             const data_block_index = binary_search.binary_search_keys_raw(
                 Key,
+
                 compare_keys,
                 Table.index_data_keys_used(index_block),
                 key,
@@ -855,7 +858,7 @@ pub fn TableType(
 
         /// Returns all data stored in the index block relating to a given key.
         /// May be called on an index block only when the key is in range of the table.
-        pub inline fn index_blocks_for_key(index_block: BlockPtrConst, key: Key) IndexBlocks {
+        pub inline fn index_blocks_for_key(index_block: BlockPtrConst, key: *const Key) IndexBlocks {
             const d = Table.index_data_block_for_key(index_block, key);
             const f = @divFloor(d, filter.data_block_count_max);
 
@@ -902,7 +905,7 @@ pub fn TableType(
             return filter_block[filter.filter_offset..][0..filter.filter_size];
         }
 
-        pub fn data_block_search(data_block: BlockPtrConst, key: Key) ?*const Value {
+        pub fn data_block_search(data_block: BlockPtrConst, key: *const Key) ?*const Value {
             const values = blk: {
                 if (data.key_count == 0) break :blk data_block_values_used(data_block);
 
@@ -917,6 +920,7 @@ pub fn TableType(
                 break :blk e.search_values(
                     Key,
                     Value,
+
                     compare_keys,
                     key_layout,
                     data_block_values_used(data_block),
@@ -928,6 +932,7 @@ pub fn TableType(
                 Key,
                 Value,
                 key_from_value,
+
                 compare_keys,
                 values,
                 key,
@@ -936,14 +941,14 @@ pub fn TableType(
             if (result.exact) {
                 const value = &values[result.index];
                 if (constants.verify) {
-                    assert(compare_keys(key, key_from_value(value)) == .eq);
+                    assert(compare_keys(&key, &key_from_value(value)) == .eq);
                 }
                 return value;
             }
 
             if (constants.verify) {
                 for (data_block_values_used(data_block)) |*value| {
-                    assert(compare_keys(key, key_from_value(value)) != .eq);
+                    assert(compare_keys(&key, &key_from_value(value)) != .eq);
                 }
             }
 
@@ -972,15 +977,15 @@ pub fn TableType(
                 if (values.len > 0) {
                     if (data_block_index == 0) {
                         assert(key_min == null or
-                            compare_keys(key_min.?, key_from_value(&values[0])) == .eq);
+                            compare_keys(&key_min.?, &key_from_value(&values[0])) == .eq);
                     }
                     if (data_block_index == data_blocks_used - 1) {
                         assert(key_max == null or
-                            compare_keys(key_from_value(&values[values.len - 1]), key_max.?) == .eq);
+                            compare_keys(&key_from_value(&values[values.len - 1]), &key_max.?) == .eq);
                     }
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a), key_from_value(b)) == .lt);
+                        assert(compare_keys(&key_from_value(a), &key_from_value(b)) == .lt);
                         a = b;
                     }
                 }

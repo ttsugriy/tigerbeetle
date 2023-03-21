@@ -258,7 +258,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
         /// Returns the value from the mutable or immutable table (possibly a tombstone),
         /// if one is available for the specified snapshot.
-        pub fn lookup_from_memory(tree: *Tree, snapshot: u64, key: Key) ?*const Value {
+        pub fn lookup_from_memory(tree: *Tree, snapshot: u64, key: *const Key) ?*const Value {
             assert(tree.lookup_snapshot_max >= snapshot);
 
             if (tree.lookup_snapshot_max == snapshot) {
@@ -300,8 +300,8 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 var it = tree.manifest.lookup(snapshot, key);
                 while (it.next()) |table| : (index_block_count += 1) {
                     assert(table.visible(snapshot));
-                    assert(compare_keys(table.key_min, key) != .gt);
-                    assert(compare_keys(table.key_max, key) != .lt);
+                    assert(compare_keys(&table.key_min, &key) != .gt);
+                    assert(compare_keys(&table.key_max, &key) != .lt);
 
                     index_block_addresses[index_block_count] = table.address;
                     index_block_checksums[index_block_count] = table.checksum;
@@ -378,7 +378,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 assert(context.index_block_count > 0);
                 assert(context.index_block_count <= constants.lsm_levels);
 
-                const blocks = Table.index_blocks_for_key(index_block, context.key);
+                const blocks = Table.index_blocks_for_key(index_block, &context.key);
 
                 context.data_block = .{
                     .address = blocks.data_block_address,
@@ -435,7 +435,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 assert(context.index_block_count > 0);
                 assert(context.index_block_count <= constants.lsm_levels);
 
-                if (Table.data_block_search(data_block, context.key)) |value| {
+                if (Table.data_block_search(data_block, &context.key)) |value| {
                     context.callback(context, unwrap_tombstone(value));
                 } else {
                     // The key is not present in this table, check the next level.
@@ -653,8 +653,8 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
             assert(range.table_count >= 1);
             assert(range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(range.key_min, tree.table_immutable.key_min()) != .gt);
-            assert(compare_keys(range.key_max, tree.table_immutable.key_max()) != .lt);
+            assert(compare_keys(&range.key_min, &tree.table_immutable.key_min()) != .gt);
+            assert(compare_keys(&range.key_max, &tree.table_immutable.key_max()) != .lt);
 
             log.debug(tree_name ++
                 ": compacting immutable table to level 0 " ++
@@ -690,9 +690,9 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
             assert(table_range.range.table_count >= 1);
             assert(table_range.range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(table.key_min, table.key_max) != .gt);
-            assert(compare_keys(table_range.range.key_min, table.key_min) != .gt);
-            assert(compare_keys(table_range.range.key_max, table.key_max) != .lt);
+            assert(compare_keys(&table.key_min, &table.key_max) != .gt);
+            assert(compare_keys(&table_range.range.key_min, &table.key_min) != .gt);
+            assert(compare_keys(&table_range.range.key_max, &table.key_max) != .lt);
 
             log.debug(tree_name ++ ": compacting {d} tables from level {d} to level {d}", .{
                 table_range.range.table_count,
