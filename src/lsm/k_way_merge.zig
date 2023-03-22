@@ -3,6 +3,8 @@ const assert = std.debug.assert;
 const math = std.math;
 const mem = std.mem;
 
+const sort = @import("../sort.zig");
+
 const Direction = @import("direction.zig").Direction;
 
 pub fn KWayMergeIterator(
@@ -329,7 +331,7 @@ fn TestContext(comptime k_max: u32) type {
                     }
                 }
                 const expect_with_duplicates = expect_buffer[0..expect_buffer_len];
-                std.sort.sort(Value, expect_with_duplicates, {}, value_less_than);
+                sort.sort(Value, expect_with_duplicates, {}, value_less_than);
 
                 var target: usize = 0;
                 var previous_key: ?u32 = null;
@@ -386,7 +388,7 @@ fn TestContext(comptime k_max: u32) type {
             return a < b;
         }
 
-        fn value_less_than(_: void, a: Value, b: Value) bool {
+        fn value_less_than(_: void, a: *const Value, b: *const Value) bool {
             return switch (math.order(a.key, b.key)) {
                 .lt => true,
                 .eq => a.version > b.version,

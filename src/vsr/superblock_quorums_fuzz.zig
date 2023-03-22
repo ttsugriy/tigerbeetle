@@ -2,6 +2,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 const log = std.log.scoped(.fuzz_vsr_superblock_quorums);
 
+const sort = @import("../sort.zig");
+
 const superblock = @import("./superblock.zig");
 const SuperBlockHeader = superblock.SuperBlockHeader;
 const SuperBlockVersion = superblock.SuperBlockVersion;
@@ -116,7 +118,7 @@ fn test_quorums_working(
     for (checksums) |*c| c.* = random.int(u128);
 
     // Create headers in ascending-sequence order to build the checksum/parent hash chain.
-    std.sort.sort(CopyTemplate, copies, {}, CopyTemplate.less_than);
+    sort.sort(CopyTemplate, copies, {}, CopyTemplate.less_than);
 
     for (headers) |*header, i| {
         header.* = std.mem.zeroInit(SuperBlockHeader, .{
@@ -236,7 +238,7 @@ pub const CopyTemplate = struct {
         return .{ .sequence = sequence, .variant = .invalid_vsr_state };
     }
 
-    fn less_than(_: void, a: CopyTemplate, b: CopyTemplate) bool {
+    fn less_than(_: void, a: *const CopyTemplate, b: *const CopyTemplate) bool {
         return a.sequence < b.sequence;
     }
 };

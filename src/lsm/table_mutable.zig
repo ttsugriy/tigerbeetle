@@ -3,6 +3,8 @@ const mem = std.mem;
 const math = std.math;
 const assert = std.debug.assert;
 
+const sort = @import("../sort.zig");
+
 const constants = @import("../constants.zig");
 const div_ceil = @import("../stdx.zig").div_ceil;
 const SetAssociativeCache = @import("set_associative_cache.zig").SetAssociativeCache;
@@ -189,7 +191,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
 
             const values = values_max[0..i];
             assert(values.len == table.count());
-            std.sort.sort(Value, values, {}, sort_values_by_key_in_ascending_order);
+            sort.sort(Value, values, {}, sort_values_by_key_in_ascending_order);
 
             table.clear();
             assert(table.count() == 0);
@@ -197,8 +199,8 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
             return values;
         }
 
-        fn sort_values_by_key_in_ascending_order(_: void, a: Value, b: Value) bool {
-            return compare_keys(key_from_value(&a), key_from_value(&b)) == .lt;
+        fn sort_values_by_key_in_ascending_order(_: void, a: *const Value, b: *const Value) bool {
+            return compare_keys(key_from_value(a), key_from_value(b)) == .lt;
         }
     };
 }

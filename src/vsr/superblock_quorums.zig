@@ -2,6 +2,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 const log = std.log.scoped(.superblock_quorums);
 
+const sort = @import("../sort.zig");
+
 const superblock = @import("./superblock.zig");
 const SuperBlockHeader = superblock.SuperBlockHeader;
 const SuperBlockVersion = superblock.SuperBlockVersion;
@@ -97,7 +99,7 @@ pub fn QuorumsType(comptime options: Options) type {
 
             for (copies) |*copy, index| quorums.count_copy(copy, index, threshold);
 
-            std.sort.sort(Quorum, quorums.slice(), {}, sort_priority_descending);
+            sort.sort(Quorum, quorums.slice(), {}, sort_priority_descending);
 
             for (quorums.slice()) |quorum| {
                 if (quorum.copies.count() == options.superblock_copies) {
@@ -123,10 +125,10 @@ pub fn QuorumsType(comptime options: Options) type {
             if (quorums.slice().len == 0) return error.NotFound;
 
             // At least one copy or quorum exists.
-            const b = quorums.slice()[0];
+            const b = &quorums.slice()[0];
 
             // Verify that the remaining quorums are correctly sorted:
-            for (quorums.slice()[1..]) |a| {
+            for (quorums.slice()[1..]) |*a| {
                 assert(sort_priority_descending({}, b, a));
                 assert(a.header.valid_checksum());
             }
@@ -139,7 +141,7 @@ pub fn QuorumsType(comptime options: Options) type {
             // - a crash during checkpoint()/view_change() before writing all copies
             // - a lost or misdirected write
             // - a latent sector error that prevented a write
-            for (quorums.slice()[1..]) |a| {
+            for (quorums.slice()[1..]) |*a| {
                 if (a.header.cluster != b.header.cluster) {
                     log.warn("superblock copy={} has cluster={} instead of {}", .{
                         a.header.copy,
@@ -183,13 +185,13 @@ pub fn QuorumsType(comptime options: Options) type {
                     } else {
                         assert(b.header.valid_checksum());
 
-                        return b;
+                        return b.*;
                     }
                 }
             }
 
             assert(b.header.valid_checksum());
-            return b;
+            return b.*;
         }
 
         fn count_copy(
@@ -279,7 +281,7 @@ pub fn QuorumsType(comptime options: Options) type {
             return quorums.array[0..quorums.count];
         }
 
-        fn sort_priority_descending(_: void, a: Quorum, b: Quorum) bool {
+        fn sort_priority_descending(_: void, a: *const Quorum, b: *const Quorum) bool {
             assert(a.header.checksum != b.header.checksum);
 
             if (a.valid and !b.valid) return true;

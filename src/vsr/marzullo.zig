@@ -1,6 +1,8 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
+const sort = @import("../sort.zig");
+
 /// Marzullo's algorithm, invented by Keith Marzullo for his Ph.D. dissertation in 1984, is an
 /// agreement algorithm used to select sources for estimating accurate time from a number of noisy
 /// time sources. NTP uses a modified form of this called the Intersection algorithm, which returns
@@ -54,7 +56,7 @@ pub const Marzullo = struct {
         }
 
         // Use a simpler sort implementation than the complexity of `std.sort.sort()` for safety:
-        std.sort.insertionSort(Tuple, tuples, {}, less_than);
+        sort.insertionSort(Tuple, tuples, {}, less_than);
 
         // Here is a description of the algorithm:
         // https://en.wikipedia.org/wiki/Marzullo%27s_algorithm#Method
@@ -116,7 +118,7 @@ pub const Marzullo = struct {
     /// with no duration, which can be found by the algorithm by sorting the lower bound before the
     /// upper bound. Alternatively, if such pathological overlaps are considered objectionable then
     /// they can be avoided by sorting the upper bound before the lower bound.
-    fn less_than(context: void, a: Tuple, b: Tuple) bool {
+    fn less_than(context: void, a: *const Tuple, b: *const Tuple) bool {
         _ = context;
 
         if (a.offset < b.offset) return true;

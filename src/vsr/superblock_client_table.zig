@@ -2,6 +2,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 const mem = std.mem;
 
+const sort = @import("../sort.zig");
+
 const constants = @import("../constants.zig");
 const vsr = @import("../vsr.zig");
 const stdx = @import("../stdx.zig");
