@@ -69,7 +69,7 @@ pub fn CompositeKey(comptime Field: type) type {
             return (value.timestamp & tombstone_bit) != 0;
         }
 
-        pub inline fn tombstone_from_key(key: Self) Value {
+        pub inline fn tombstone_from_key(key: *const Self) Value {
             return .{
                 .field = key.field,
                 .timestamp = key.timestamp | tombstone_bit,

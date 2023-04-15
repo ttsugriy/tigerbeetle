@@ -3,6 +3,8 @@ const mem = std.mem;
 const math = std.math;
 const assert = std.debug.assert;
 
+const KeyExtractorType = @import("table.zig").KeyExtractorType;
+
 const constants = @import("../constants.zig");
 const div_ceil = @import("../stdx.zig").div_ceil;
 const binary_search = @import("binary_search.zig");
@@ -38,16 +40,16 @@ pub fn TableImmutableType(comptime Table: type) type {
             return table.values.ptr[0..value_count_max];
         }
 
-        pub inline fn key_min(table: *const TableImmutable) Key {
+        pub inline fn key_min(table: *const TableImmutable) KeyExtractorType(Key, Value) {
             assert(!table.free);
             assert(table.values.len > 0);
-            return key_from_value(&table.values[0]).value();
+            return key_from_value(&table.values[0]);
         }
 
-        pub inline fn key_max(table: *const TableImmutable) Key {
+        pub inline fn key_max(table: *const TableImmutable) KeyExtractorType(Key, Value) {
             assert(!table.free);
             assert(table.values.len > 0);
-            return key_from_value(&table.values[table.values.len - 1]).value();
+            return key_from_value(&table.values[table.values.len - 1]);
         }
 
         pub fn deinit(table: *TableImmutable, allocator: mem.Allocator) void {
@@ -103,7 +105,7 @@ pub fn TableImmutableType(comptime Table: type) type {
         }
 
         // TODO(ifreund) This would be great to unit test.
-        pub fn get(table: *const TableImmutable, key: Key) ?*const Value {
+        pub fn get(table: *const TableImmutable, key: *const Key) ?*const Value {
             assert(!table.free);
 
             const result = binary_search.binary_search_values(
@@ -112,12 +114,12 @@ pub fn TableImmutableType(comptime Table: type) type {
                 key_from_value,
                 compare_keys,
                 table.values,
-                key,
+                key.*, //PENDING:
                 .{},
             );
             if (result.exact) {
                 const value = &table.values[result.index];
-                if (constants.verify) assert(compare_keys(&key, key_from_value(value).ptr()) == .eq);
+                if (constants.verify) assert(compare_keys(key, key_from_value(value).ptr()) == .eq);
                 return value;
             }
 

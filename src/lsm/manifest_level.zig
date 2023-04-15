@@ -319,8 +319,8 @@ pub fn ManifestLevelType(
             // Ascending:  Find the first table where table.key_max ≤ iterator.key_min.
             // Descending: Find the first table where table.key_max ≤ iterator.key_max.
             const target = level.keys.search(switch (direction) {
-                .ascending => key_min,
-                .descending => key_max,
+                .ascending => &key_min,
+                .descending => &key_max,
             });
             assert(target.node <= level.keys.node_count);
 
@@ -420,8 +420,11 @@ pub fn TestContext(
             return value.key;
         }
 
-        inline fn tombstone_from_key(key: Key) Value {
-            return .{ .key = key, .tombstone = true };
+        inline fn tombstone_from_key(key: *const Key) Value {
+            return .{
+                .key = key.*,
+                .tombstone = true,
+            };
         }
 
         inline fn tombstone(value: *const Value) bool {

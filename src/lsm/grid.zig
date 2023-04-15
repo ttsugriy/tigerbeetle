@@ -117,9 +117,9 @@ pub fn GridType(comptime Storage: type) type {
                 };
             }
 
-            inline fn hash_address(address: u64) u64 {
-                assert(address > 0);
-                return std.hash.Wyhash.hash(0, mem.asBytes(&address));
+            inline fn hash_address(address: *const u64) u64 {
+                assert(address.* > 0);
+                return std.hash.Wyhash.hash(0, mem.asBytes(address));
             }
 
             inline fn equal_addresses(a: *const u64, b: *const u64) bool {
@@ -249,7 +249,7 @@ pub fn GridType(comptime Storage: type) type {
             // because the superblock will not allow it to be overwritten before
             // the end of the measure.
 
-            grid.cache.demote(address);
+            grid.cache.demote(&address);
             grid.superblock.free_set.release(address);
         }
 
@@ -446,7 +446,7 @@ pub fn GridType(comptime Storage: type) type {
             const grid = read.grid;
 
             // Try to resolve the read from the cache.
-            if (grid.cache.get_index(read.address)) |cache_index| {
+            if (grid.cache.get_index(&read.address)) |cache_index| {
                 const cache_block = grid.cache_blocks[cache_index];
                 if (constants.verify) grid.verify_cached_read(read.address, cache_block);
                 grid.read_block_resolve(read, cache_block);

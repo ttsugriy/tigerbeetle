@@ -252,7 +252,7 @@ pub fn CompactionType(
             // This invariant is always true for the last level as it doesn't have any lower ones.
             const drop_tombstones = context.tree.manifest.compaction_must_drop_tombstones(
                 context.level_b,
-                context.range_b,
+                &context.range_b,
             );
             assert(drop_tombstones or context.level_b < constants.lsm_levels - 1);
 

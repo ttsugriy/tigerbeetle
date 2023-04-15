@@ -29,7 +29,7 @@ pub fn SetAssociativeCache(
     comptime Key: type,
     comptime Value: type,
     comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
-    comptime hash: fn (Key) callconv(.Inline) u64,
+    comptime hash: fn (*const Key) callconv(.Inline) u64,
     comptime equal: fn (*const Key, *const Key) callconv(.Inline) bool,
     comptime layout: Layout,
     comptime name: [:0]const u8,
@@ -196,9 +196,9 @@ pub fn SetAssociativeCache(
             mem.set(u64, self.clocks.words, 0);
         }
 
-        pub fn get_index(self: *Self, key: Key) ?usize {
+        pub fn get_index(self: *Self, key: *const Key) ?usize {
             const set = self.associate(key);
-            if (self.search(set, key)) |way| {
+            if (self.search(&set, key)) |way| {
                 self.hits += 1;
                 tracer.plot(.{ .cache_hits = .{ .cache_name = name } }, @intToFloat(f64, self.hits));
                 const count = self.counts.get(set.offset + way);
@@ -211,15 +211,15 @@ pub fn SetAssociativeCache(
             }
         }
 
-        pub fn get(self: *Self, key: Key) ?*align(value_alignment) Value {
+        pub fn get(self: *Self, key: *const Key) ?*align(value_alignment) Value {
             const index = self.get_index(key) orelse return null;
             return @alignCast(value_alignment, &self.values[index]);
         }
 
         /// Remove a key from the set associative cache if present.
-        pub fn remove(self: *Self, key: Key) void {
+        pub fn remove(self: *Self, key: *const Key) void {
             const set = self.associate(key);
-            const way = self.search(set, key) orelse return;
+            const way = self.search(&set, key) orelse return;
 
             self.counts.set(set.offset + way, 0);
             set.values[way] = undefined;
@@ -227,21 +227,21 @@ pub fn SetAssociativeCache(
 
         /// Hint that the key is less likely to be accessed in the future, without actually removing
         /// it from the cache.
-        pub fn demote(self: *Self, key: Key) void {
+        pub fn demote(self: *Self, key: *const Key) void {
             const set = self.associate(key);
-            const way = self.search(set, key) orelse return;
+            const way = self.search(&set, key) orelse return;
 
             self.counts.set(set.offset + way, 1);
         }
 
         /// If the key is present in the set, returns the way. Otherwise returns null.
-        inline fn search(self: *const Self, set: Set, key: Key) ?usize {
+        inline fn search(self: *const Self, set: *const Set, key: *const Key) ?usize {
             const ways = search_tags(set.tags, set.tag);
 
             var it = BitIterator(Ways){ .bits = ways };
             while (it.next()) |way| {
                 const count = self.counts.get(set.offset + way);
-                if (count > 0 and equal(key_from_value(&set.values[way]).ptr(), &key)) {
+                if (count > 0 and equal(key_from_value(&set.values[way]).ptr(), key)) {
                     return way;
                 }
             }
@@ -269,8 +269,8 @@ pub fn SetAssociativeCache(
         /// Return the index at which the value was inserted.
         pub fn insert_index(self: *Self, value: *const Value) usize {
             const key = key_from_value(value);
-            const set = self.associate(key.value());
-            if (self.search(set, key.value())) |way| {
+            const set = self.associate(key.ptr());
+            if (self.search(&set, key.ptr())) |way| {
                 // Overwrite the old entry for this key.
                 self.counts.set(set.offset + way, 1);
                 set.values[way] = value.*;
@@ -347,7 +347,7 @@ pub fn SetAssociativeCache(
             }
         };
 
-        inline fn associate(self: *Self, key: Key) Set {
+        inline fn associate(self: *Self, key: *const Key) Set {
             const entropy = hash(key);
 
             const tag = @truncate(Tag, entropy >> math.log2_int(u64, self.sets));

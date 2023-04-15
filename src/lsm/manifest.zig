@@ -299,11 +299,11 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
         }
 
         /// Returns an iterator over tables that might contain `key` (but are not guaranteed to).
-        pub fn lookup(manifest: *Manifest, snapshot: u64, key: Key) LookupIterator {
+        pub fn lookup(manifest: *Manifest, snapshot: u64, key: *const Key) LookupIterator {
             return .{
                 .manifest = manifest,
                 .snapshot = snapshot,
-                .key = key,
+                .key = key.*,
             };
         }
 
@@ -453,7 +453,7 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
             while (it.next()) |table| {
                 iterations += 1;
 
-                const range = manifest.compaction_range(level_a + 1, table.key_min, table.key_max);
+                const range = manifest.compaction_range(level_a + 1, &table.key_min, &table.key_max);
                 if (optimal == null or range.table_count < optimal.?.range.table_count) {
                     optimal = .{
                         .table = table.*,
@@ -500,16 +500,16 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
         pub fn compaction_range(
             manifest: *const Manifest,
             level_b: u8,
-            key_min: Key,
-            key_max: Key,
+            key_min: *const Key,
+            key_max: *const Key,
         ) CompactionRange {
             assert(level_b < constants.lsm_levels);
-            assert(compare_keys(&key_min, &key_max) != .gt);
+            assert(compare_keys(key_min, key_max) != .gt);
 
             var range = CompactionRange{
                 .table_count = 1,
-                .key_min = key_min,
-                .key_max = key_max,
+                .key_min = key_min.*,
+                .key_max = key_max.*,
             };
 
             const snapshots = [_]u64{snapshot_latest};
@@ -539,8 +539,8 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
 
             assert(range.table_count > 0);
             assert(compare_keys(&range.key_min, &range.key_max) != .gt);
-            assert(compare_keys(&range.key_min, &key_min) != .gt);
-            assert(compare_keys(&range.key_max, &key_max) != .lt);
+            assert(compare_keys(&range.key_min, key_min) != .gt);
+            assert(compare_keys(&range.key_max, key_max) != .lt);
 
             return range;
         }
@@ -549,7 +549,7 @@ pub fn ManifestType(comptime Table: type, comptime Storage: type) type {
         pub fn compaction_must_drop_tombstones(
             manifest: *const Manifest,
             level_b: u8,
-            range: CompactionRange,
+            range: *const CompactionRange,
         ) bool {
             assert(level_b < constants.lsm_levels);
             assert(range.table_count > 0);

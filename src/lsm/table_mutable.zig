@@ -29,8 +29,8 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
             Value,
             Table.key_from_value,
             struct {
-                inline fn hash(key: Key) u64 {
-                    return std.hash.Wyhash.hash(0, mem.asBytes(&key));
+                inline fn hash(key: *const Key) u64 {
+                    return std.hash.Wyhash.hash(0, mem.asBytes(key));
                 }
             }.hash,
             struct {
@@ -84,7 +84,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
             table.values.deinit(allocator);
         }
 
-        pub fn get(table: *const TableMutable, key: Key) ?*const Value {
+        pub fn get(table: *const TableMutable, key: *const Key) ?*const Value {
             if (table.values.getKeyPtr(tombstone_from_key(key))) |value| {
                 return value;
             }
@@ -135,7 +135,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
                     } else {
                         // If the put is already on-disk, then we need to follow it with a tombstone.
                         // The put and the tombstone may cancel each other out later during compaction.
-                        table.values.putAssumeCapacityNoClobber(tombstone_from_key(key_from_value(value).value()), {});
+                        table.values.putAssumeCapacityNoClobber(tombstone_from_key(key_from_value(value).ptr()), {});
                     }
                 },
                 .general => {
@@ -143,7 +143,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
                     // by the new one if using e.g. putAssumeCapacity(). Instead we must use the lower
                     // level getOrPut() API and manually overwrite the old key.
                     const upsert = table.values.getOrPutAssumeCapacity(value.*);
-                    upsert.key_ptr.* = tombstone_from_key(key_from_value(value).value());
+                    upsert.key_ptr.* = tombstone_from_key(key_from_value(value).ptr());
                 },
             }
 
@@ -180,7 +180,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
 
                 if (table.values_cache) |cache| {
                     if (tombstone(value)) {
-                        cache.remove(key_from_value(value).value());
+                        cache.remove(key_from_value(value).ptr());
                     } else {
                         cache.insert(value);
                     }

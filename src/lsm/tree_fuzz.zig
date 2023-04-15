@@ -50,7 +50,7 @@ const Key = packed struct {
         return value.tombstone != 0;
     }
 
-    inline fn tombstone_from_key(key: Key) Key.Value {
+    inline fn tombstone_from_key(key: *const Key) Key.Value {
         return Key.Value{
             .id = key.id,
             .value = 0,

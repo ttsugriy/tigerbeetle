@@ -203,7 +203,7 @@ fn SegmentedArrayType(
             ) u32 {
                 if (options.verify) array.verify();
 
-                const cursor = array.search(key_from_value(&element).value());
+                const cursor = array.search(key_from_value(&element).ptr());
                 const absolute_index = array.absolute_index_for_cursor(cursor);
                 array.insert_elements_at_absolute_index(node_pool, absolute_index, &[_]T{element});
 
@@ -847,7 +847,7 @@ fn SegmentedArrayType(
             /// if there is no exact match, the next greatest key.
             pub fn search(
                 array: *const Self,
-                key: K,
+                key: *const K,
             ) Cursor {
                 if (array.node_count == 0) {
                     return .{
@@ -866,7 +866,7 @@ fn SegmentedArrayType(
                     // This trick seems to be what's needed to get llvm to emit branchless code for this,
                     // a ternary-style if expression was generated as a jump here for whatever reason.
                     const next_offsets = [_]usize{ offset, mid };
-                    offset = next_offsets[@boolToInt(compare_keys(key_from_value(node).ptr(), &key) == .lt)];
+                    offset = next_offsets[@boolToInt(compare_keys(key_from_value(node).ptr(), key) == .lt)];
 
                     length -= half;
                 }
@@ -886,7 +886,7 @@ fn SegmentedArrayType(
                     key_from_value,
                     compare_keys,
                     array.node_elements(node),
-                    key,
+                    key.*,
                     .{},
                 );
 

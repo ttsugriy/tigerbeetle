@@ -101,7 +101,7 @@ pub fn TableType(
     /// Returns whether a value is a tombstone value.
     comptime table_tombstone: fn (*const TableValue) callconv(.Inline) bool,
     /// Returns a tombstone value representation for a key.
-    comptime table_tombstone_from_key: fn (TableKey) callconv(.Inline) TableValue,
+    comptime table_tombstone_from_key: fn (*const TableKey) callconv(.Inline) TableValue,
     /// The maximum number of values per table.
     comptime table_value_count_max: usize,
     comptime usage: TableUsage,
