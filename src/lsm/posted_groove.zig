@@ -7,7 +7,7 @@ const mem = std.mem;
 const constants = @import("../constants.zig");
 
 const TableType = @import("table.zig").TableType;
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 const TreeType = @import("tree.zig").TreeType;
 const GridType = @import("grid.zig").GridType;
 const NodePool = @import("node_pool.zig").NodePool(constants.lsm_manifest_node_size, 16);
@@ -42,7 +42,7 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 return math.order(a.*, b.*);
             }
 
-            inline fn key_from_value(value: *const Value) KeyExtractorType(u128, Value) {
+            inline fn key_from_value(value: *const Value) KeyHelper(u128, Value).KeyExtractor {
                 return .{
                     .key = value.id,
                 };

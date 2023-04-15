@@ -11,7 +11,7 @@ const constants = @import("../constants.zig");
 const div_ceil = @import("../stdx.zig").div_ceil;
 const verify = constants.verify;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 const tracer = @import("../tracer.zig");
 
@@ -28,9 +28,9 @@ pub const Layout = struct {
 pub fn SetAssociativeCache(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
-    comptime hash: fn (*const Key) callconv(.Inline) u64,
-    comptime equal: fn (*const Key, *const Key) callconv(.Inline) bool,
+    comptime key_from_value: KeyHelper(Key, Value).KeyFromValueFn,
+    comptime hash: KeyHelper(Key, Value).HashFn,
+    comptime equal: KeyHelper(Key, Value).EqualFn,
     comptime layout: Layout,
     comptime name: [:0]const u8,
 ) type {

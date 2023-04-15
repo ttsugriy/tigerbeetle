@@ -2,13 +2,12 @@ const std = @import("std");
 const assert = std.debug.assert;
 const math = std.math;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 pub fn CompositeKey(comptime Field: type) type {
     assert(Field == u128 or Field == u64);
 
     return packed struct {
         const Self = @This();
+        const KeyHelper = @import("table.zig").KeyHelper(Self, Value);
 
         pub const sentinel_key: Self = .{
             .field = math.maxInt(Field),
@@ -58,7 +57,7 @@ pub fn CompositeKey(comptime Field: type) type {
             }
         }
 
-        pub inline fn key_from_value(value: *const Value) KeyExtractorType(Self, Value) {
+        pub inline fn key_from_value(value: *const Value) KeyHelper.KeyExtractor {
             return .{ .key = .{
                 .field = value.field,
                 .timestamp = @truncate(u63, value.timestamp),

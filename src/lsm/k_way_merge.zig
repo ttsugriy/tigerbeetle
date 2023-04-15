@@ -4,13 +4,14 @@ const math = std.math;
 const mem = std.mem;
 
 const Direction = @import("direction.zig").Direction;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 pub fn KWayMergeIterator(
     comptime Context: type,
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime key_from_value: KeyHelper(Key, Value).KeyFromValueFn,
+    comptime compare_keys: KeyHelper(Key, Value).CompareKeysFn,
     comptime k_max: u32,
     /// Peek the next key in the stream identified by stream_index.
     /// For example, peek(stream_index=2) returns user_streams[2][0].

@@ -3,7 +3,7 @@ const assert = std.debug.assert;
 const math = std.math;
 const mem = std.mem;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 /// keys_count must be one less than a power of two. This allows us to align the layout
 /// such that great great grandchildren of a node are not unnecessarily split across cache lines.
@@ -102,7 +102,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
         pub fn layout_from_keys_or_values(
             comptime Key: type,
             comptime Value: type,
-            comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
+            comptime key_from_value: KeyHelper(Key, Value).KeyFromValueFn,
             /// This sentinel must compare greater than all actual keys.
             comptime sentinel_key: Key,
             values: []const Value,
@@ -139,7 +139,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
         pub fn search_values(
             comptime Key: type,
             comptime Value: type,
-            comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+            comptime compare_keys: KeyHelper(Key, Value).CompareKeysFn,
             layout: *const [keys_count + 1]Key,
             values: []const Value,
             key: *const Key,
@@ -224,7 +224,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
         /// TODO examine the generated machine code for this function
         pub fn search_keys(
             comptime Key: type,
-            comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+            comptime compare_keys: KeyHelper(Key, Key).CompareKeysFn,
             layout: *const [keys_count + 1]Key,
             values_count: u32,
             key: *const Key,

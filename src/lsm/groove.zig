@@ -11,8 +11,7 @@ const TreeType = @import("tree.zig").TreeType;
 const GridType = @import("grid.zig").GridType;
 const CompositeKey = @import("composite_key.zig").CompositeKey;
 const NodePool = @import("node_pool.zig").NodePool(constants.lsm_manifest_node_size, 16);
-
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 const snapshot_latest = @import("tree.zig").snapshot_latest;
 const compaction_snapshot_for_op = @import("tree.zig").compaction_snapshot_for_op;
@@ -26,7 +25,7 @@ fn ObjectTreeHelpers(comptime Object: type) type {
             return std.math.order(timestamp_a.*, timestamp_b.*);
         }
 
-        inline fn key_from_value(value: *const Object) KeyExtractorType(u64, Object) {
+        inline fn key_from_value(value: *const Object) KeyHelper(u64, Object).KeyExtractor {
             return .{
                 .key = value.timestamp & ~@as(u64, tombstone_bit),
             };
@@ -62,7 +61,7 @@ const IdTreeValue = extern struct {
         return std.math.order(a.*, b.*);
     }
 
-    inline fn key_from_value(value: *const IdTreeValue) KeyExtractorType(u128, IdTreeValue) {
+    inline fn key_from_value(value: *const IdTreeValue) KeyHelper(u128, IdTreeValue).KeyExtractor {
         return .{
             .key = value.id,
         };

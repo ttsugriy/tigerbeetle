@@ -2,7 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const math = std.math;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 pub const Config = struct {
     verify: bool = false,
@@ -24,8 +24,8 @@ pub const Config = struct {
 pub fn binary_search_values_raw(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
-    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+    comptime key_from_value: KeyHelper(Key, Value).KeyFromValueFn,
+    comptime compare_keys: KeyHelper(Key, Value).CompareKeysFn,
     values: []const Value,
     key: *const Key,
     comptime config: Config,
@@ -83,7 +83,7 @@ pub fn binary_search_values_raw(
 
 pub inline fn binary_search_keys_raw(
     comptime Key: type,
-    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+    comptime compare_keys: KeyHelper(Key, Key).CompareKeysFn,
     keys: []const Key,
     key: *const Key,
     comptime config: Config,
@@ -92,7 +92,7 @@ pub inline fn binary_search_keys_raw(
         Key,
         Key,
         struct {
-            inline fn key_from_key(k: *const Key) KeyExtractorType(Key, Key) {
+            inline fn key_from_key(k: *const Key) KeyHelper(Key, Key).KeyExtractor {
                 return .{
                     .key = k.*,
                 };
@@ -113,8 +113,8 @@ const BinarySearchResult = struct {
 pub inline fn binary_search_values(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
-    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+    comptime key_from_value: KeyHelper(Key, Value).KeyFromValueFn,
+    comptime compare_keys: KeyHelper(Key, Value).CompareKeysFn,
     values: []const Value,
     key: *const Key,
     comptime config: Config,
@@ -128,7 +128,7 @@ pub inline fn binary_search_values(
 
 pub inline fn binary_search_keys(
     comptime Key: type,
-    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+    comptime compare_keys: KeyHelper(Key, Key).CompareKeysFn,
     keys: []const Key,
     key: *const Key,
     comptime config: Config,

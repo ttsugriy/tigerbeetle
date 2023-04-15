@@ -10,7 +10,7 @@ const binary_search_values_raw = @import("binary_search.zig").binary_search_valu
 const binary_search_keys = @import("binary_search.zig").binary_search_keys;
 const Direction = @import("direction.zig").Direction;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 /// A "segmented array" is an array with efficient (amortized) random-insert/remove operations.
 /// Also known as an "unrolled linked list": https://en.wikipedia.org/wiki/Unrolled_linked_list
@@ -35,8 +35,8 @@ pub fn SortedSegmentedArray(
     comptime NodePool: type,
     comptime element_count_max: u32,
     comptime Key: type,
-    comptime key_from_value: fn (*const T) callconv(.Inline) KeyExtractorType(Key, T),
-    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+    comptime key_from_value: KeyHelper(Key, T).KeyFromValueFn,
+    comptime compare_keys: KeyHelper(Key, T).CompareKeysFn,
     comptime options: Options,
 ) type {
     return SegmentedArrayType(T, NodePool, element_count_max, Key, key_from_value, compare_keys, options);
@@ -54,8 +54,8 @@ fn SegmentedArrayType(
     comptime element_count_max: u32,
     // Set when the SegmentedArray is ordered:
     comptime Key: ?type,
-    comptime key_from_value: if (Key) |K| (fn (*const T) callconv(.Inline) KeyExtractorType(K, T)) else void,
-    comptime compare_keys: if (Key) |K| (fn (*const K, *const K) callconv(.Inline) math.Order) else void,
+    comptime key_from_value: if (Key) |K| KeyHelper(K, T).KeyFromValueFn else void,
+    comptime compare_keys: if (Key) |K| KeyHelper(K, T).CompareKeysFn else void,
     comptime options: Options,
 ) type {
     return struct {
@@ -915,8 +915,8 @@ fn TestContext(
     comptime node_size: u32,
     comptime element_count_max: u32,
     comptime Key: type,
-    comptime key_from_value: fn (*const T) callconv(.Inline) Key,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime key_from_value: KeyHelper(Key, T).KeyFromValueFn,
+    comptime compare_keys: KeyHelper(Key, T).CompareKeysFn,
     comptime element_order: enum { sorted, unsorted },
     comptime options: Options,
 ) type {

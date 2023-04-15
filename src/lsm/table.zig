@@ -28,7 +28,7 @@ pub const TableUsage = enum {
     secondary_index,
 };
 
-pub fn KeyExtractorType(
+pub fn KeyHelper(
     comptime TableKey: type,
     comptime TableValue: type,
 ) type {
@@ -37,15 +37,23 @@ pub fn KeyExtractorType(
         std.meta.fieldInfo(TableValue, .key).field_type == TableKey;
 
     return struct {
-        key: if (by_ref) *const TableKey else TableKey,
+        pub const KeyExtractor = struct {
+            key: if (by_ref) *const TableKey else TableKey,
 
-        pub inline fn ptr(self: *const @This()) *const TableKey {
-            return if (by_ref) self.key else &self.key;
-        }
+            pub inline fn ptr(self: *const @This()) *const TableKey {
+                return if (by_ref) self.key else &self.key;
+            }
 
-        pub inline fn value(self: *const @This()) TableKey {
-            return if (by_ref) self.key.* else self.key;
-        }
+            pub inline fn value(self: *const @This()) TableKey {
+                return if (by_ref) self.key.* else self.key;
+            }
+        };
+
+        pub const CompareKeysFn = fn (*const TableKey, *const TableKey) callconv(.Inline) math.Order;
+        pub const KeyFromValueFn = fn (*const TableValue) callconv(.Inline) KeyExtractor;
+        pub const TombstoneFromKeyFn = fn (*const TableKey) callconv(.Inline) TableValue;
+        pub const HashFn = fn (*const TableKey) callconv(.Inline) u64;
+        pub const EqualFn = fn (*const TableKey, *const TableKey) callconv(.Inline) bool;
     };
 }
 
@@ -92,16 +100,16 @@ pub fn TableType(
     comptime TableKey: type,
     comptime TableValue: type,
     /// Returns the sort order between two keys.
-    comptime table_compare_keys: fn (*const TableKey, *const TableKey) callconv(.Inline) math.Order,
+    comptime table_compare_keys: KeyHelper(TableKey, TableValue).CompareKeysFn,
     /// Returns the key for a value. For example, given `object` returns `object.id`.
     /// Since most objects contain an id, this avoids duplicating the key when storing the value.
-    comptime table_key_from_value: fn (*const TableValue) callconv(.Inline) KeyExtractorType(TableKey, TableValue),
+    comptime table_key_from_value: KeyHelper(TableKey, TableValue).KeyFromValueFn,
     /// Must compare greater than all other keys.
     comptime table_sentinel_key: TableKey,
     /// Returns whether a value is a tombstone value.
     comptime table_tombstone: fn (*const TableValue) callconv(.Inline) bool,
     /// Returns a tombstone value representation for a key.
-    comptime table_tombstone_from_key: fn (*const TableKey) callconv(.Inline) TableValue,
+    comptime table_tombstone_from_key: KeyHelper(TableKey, TableValue).TombstoneFromKeyFn,
     /// The maximum number of values per table.
     comptime table_value_count_max: usize,
     comptime usage: TableUsage,

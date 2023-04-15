@@ -8,7 +8,7 @@ const constants = @import("../constants.zig");
 const lsm = @import("tree.zig");
 const binary_search = @import("binary_search.zig");
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 const Direction = @import("direction.zig").Direction;
 const SegmentedArray = @import("segmented_array.zig").SegmentedArray;
@@ -18,7 +18,7 @@ pub fn ManifestLevelType(
     comptime NodePool: type,
     comptime Key: type,
     comptime TableInfo: type,
-    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
+    comptime compare_keys: KeyHelper(Key, Key).CompareKeysFn,
     comptime table_count_max: u32,
 ) type {
     return struct {
@@ -30,7 +30,7 @@ pub fn ManifestLevelType(
             table_count_max,
             Key,
             struct {
-                inline fn key_from_value(value: *const Key) KeyExtractorType(Key, Key) {
+                inline fn key_from_value(value: *const Key) KeyHelper(Key, Key).KeyExtractor {
                     return .{
                         .key = value.*,
                     };

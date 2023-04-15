@@ -3,7 +3,7 @@ const mem = std.mem;
 const math = std.math;
 const assert = std.debug.assert;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 const constants = @import("../constants.zig");
 const div_ceil = @import("../stdx.zig").div_ceil;
@@ -40,13 +40,13 @@ pub fn TableImmutableType(comptime Table: type) type {
             return table.values.ptr[0..value_count_max];
         }
 
-        pub inline fn key_min(table: *const TableImmutable) KeyExtractorType(Key, Value) {
+        pub inline fn key_min(table: *const TableImmutable) KeyHelper(Key, Value).KeyExtractor {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[0]);
         }
 
-        pub inline fn key_max(table: *const TableImmutable) KeyExtractorType(Key, Value) {
+        pub inline fn key_max(table: *const TableImmutable) KeyHelper(Key, Value).KeyExtractor {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[table.values.len - 1]);
