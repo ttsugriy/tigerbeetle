@@ -2,6 +2,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 const math = std.math;
 
+const KeyExtractorType = @import("table.zig").KeyExtractorType;
+
 pub fn CompositeKey(comptime Field: type) type {
     assert(Field == u128 or Field == u64);
 
@@ -42,7 +44,7 @@ pub fn CompositeKey(comptime Field: type) type {
             assert(@sizeOf(Self) * 8 == @bitSizeOf(Self));
         }
 
-        pub inline fn compare_keys(a: Self, b: Self) math.Order {
+        pub inline fn compare_keys(a: *const Self, b: *const Self) math.Order {
             if (a.field < b.field) {
                 return .lt;
             } else if (a.field > b.field) {
@@ -56,11 +58,11 @@ pub fn CompositeKey(comptime Field: type) type {
             }
         }
 
-        pub inline fn key_from_value(value: *const Value) Self {
-            return .{
+        pub inline fn key_from_value(value: *const Value) KeyExtractorType(Self, Value) {
+            return .{ .key = .{
                 .field = value.field,
                 .timestamp = @truncate(u63, value.timestamp),
-            };
+            } };
         }
 
         pub inline fn tombstone(value: *const Value) bool {

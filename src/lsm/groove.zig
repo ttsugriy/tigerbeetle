@@ -12,6 +12,8 @@ const GridType = @import("grid.zig").GridType;
 const CompositeKey = @import("composite_key.zig").CompositeKey;
 const NodePool = @import("node_pool.zig").NodePool(constants.lsm_manifest_node_size, 16);
 
+const KeyExtractorType = @import("table.zig").KeyExtractorType;
+
 const snapshot_latest = @import("tree.zig").snapshot_latest;
 const compaction_snapshot_for_op = @import("tree.zig").compaction_snapshot_for_op;
 
@@ -20,12 +22,14 @@ fn ObjectTreeHelpers(comptime Object: type) type {
     assert(std.meta.fieldInfo(Object, .timestamp).field_type == u64);
 
     return struct {
-        inline fn compare_keys(timestamp_a: u64, timestamp_b: u64) std.math.Order {
-            return std.math.order(timestamp_a, timestamp_b);
+        inline fn compare_keys(timestamp_a: *const u64, timestamp_b: *const u64) std.math.Order {
+            return std.math.order(timestamp_a.*, timestamp_b.*);
         }
 
-        inline fn key_from_value(value: *const Object) u64 {
-            return value.timestamp & ~@as(u64, tombstone_bit);
+        inline fn key_from_value(value: *const Object) KeyExtractorType(u64, Object) {
+            return .{
+                .key = value.timestamp & ~@as(u64, tombstone_bit),
+            };
         }
 
         const sentinel_key = std.math.maxInt(u64);
@@ -54,12 +58,14 @@ const IdTreeValue = extern struct {
         assert(@bitSizeOf(IdTreeValue) == 32 * 8);
     }
 
-    inline fn compare_keys(a: u128, b: u128) std.math.Order {
-        return std.math.order(a, b);
+    inline fn compare_keys(a: *const u128, b: *const u128) std.math.Order {
+        return std.math.order(a.*, b.*);
     }
 
-    inline fn key_from_value(value: *const IdTreeValue) u128 {
-        return value.id;
+    inline fn key_from_value(value: *const IdTreeValue) KeyExtractorType(u128, IdTreeValue) {
+        return .{
+            .key = value.id,
+        };
     }
 
     const sentinel_key = std.math.maxInt(u128);

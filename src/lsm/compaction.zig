@@ -445,12 +445,12 @@ pub fn CompactionType(
                     const first_key = key_from_value(&values_in[0]);
                     const last_key = key_from_value(&values_in[values_in.len - 1]);
                     if (compaction.last_keys_in[index]) |last_key_prev| {
-                        assert(compare_keys(last_key_prev, first_key) == .lt);
+                        assert(compare_keys(&last_key_prev, first_key.ptr()) == .lt);
                     }
                     if (values_in.len > 1) {
-                        assert(compare_keys(first_key, last_key) == .lt);
+                        assert(compare_keys(first_key.ptr(), last_key.ptr()) == .lt);
                     }
-                    compaction.last_keys_in[index] = last_key;
+                    compaction.last_keys_in[index] = last_key.value();
                 }
             } else {
                 // If no more data blocks available, just leave `values_in[index]` empty.
@@ -581,7 +581,7 @@ pub fn CompactionType(
             {
                 const value_a = &values_in_a[values_in_a_index];
                 const value_b = &values_in_b[values_in_b_index];
-                switch (compare_keys(key_from_value(value_a), key_from_value(value_b))) {
+                switch (compare_keys(key_from_value(value_a).ptr(), key_from_value(value_b).ptr())) {
                     .lt => {
                         values_in_a_index += 1;
                         if (compaction.drop_tombstones and

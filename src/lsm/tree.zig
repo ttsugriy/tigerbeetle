@@ -301,8 +301,8 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 var it = tree.manifest.lookup(snapshot, key);
                 while (it.next()) |table| : (index_block_count += 1) {
                     assert(table.visible(snapshot));
-                    assert(compare_keys(table.key_min, key) != .gt);
-                    assert(compare_keys(table.key_max, key) != .lt);
+                    assert(compare_keys(&table.key_min, &key) != .gt);
+                    assert(compare_keys(&table.key_max, &key) != .lt);
 
                     index_block_addresses[index_block_count] = table.address;
                     index_block_checksums[index_block_count] = table.checksum;
@@ -662,8 +662,8 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
             assert(range.table_count >= 1);
             assert(range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(range.key_min, tree.table_immutable.key_min()) != .gt);
-            assert(compare_keys(range.key_max, tree.table_immutable.key_max()) != .lt);
+            assert(compare_keys(&range.key_min, &tree.table_immutable.key_min()) != .gt);
+            assert(compare_keys(&range.key_max, &tree.table_immutable.key_max()) != .lt);
 
             log.debug(tree_name ++
                 ": compacting immutable table to level 0 " ++
@@ -700,9 +700,9 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
             assert(table_range.range.table_count >= 1);
             assert(table_range.range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(table.key_min, table.key_max) != .gt);
-            assert(compare_keys(table_range.range.key_min, table.key_min) != .gt);
-            assert(compare_keys(table_range.range.key_max, table.key_max) != .lt);
+            assert(compare_keys(&table.key_min, &table.key_max) != .gt);
+            assert(compare_keys(&table_range.range.key_min, &table.key_min) != .gt);
+            assert(compare_keys(&table_range.range.key_max, &table.key_max) != .lt);
 
             log.debug(tree_name ++ ": compacting {d} tables from level {d} to level {d}", .{
                 table_range.range.table_count,

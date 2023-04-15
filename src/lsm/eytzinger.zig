@@ -3,6 +3,8 @@ const assert = std.debug.assert;
 const math = std.math;
 const mem = std.mem;
 
+const KeyExtractorType = @import("table.zig").KeyExtractorType;
+
 /// keys_count must be one less than a power of two. This allows us to align the layout
 /// such that great great grandchildren of a node are not unnecessarily split across cache lines.
 pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
@@ -100,7 +102,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
         pub fn layout_from_keys_or_values(
             comptime Key: type,
             comptime Value: type,
-            comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
+            comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
             /// This sentinel must compare greater than all actual keys.
             comptime sentinel_key: Key,
             values: []const Value,
@@ -121,7 +123,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
 
             for (tree) |values_index, i| {
                 if (values_index < values.len) {
-                    layout[i + 1] = key_from_value(&values[values_index]);
+                    layout[i + 1] = key_from_value(&values[values_index]).value();
                 } else {
                     layout[i + 1] = sentinel_key;
                 }
@@ -137,7 +139,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
         pub fn search_values(
             comptime Key: type,
             comptime Value: type,
-            comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+            comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
             layout: *const [keys_count + 1]Key,
             values: []const Value,
             key: Key,
@@ -184,7 +186,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             var i: u32 = 0;
             while (i < keys.len) {
                 // TODO use @prefetch when available: https://github.com/ziglang/zig/issues/3600
-                i = if (compare_keys(key, keys[i]) == .gt) 2 * i + 2 else 2 * i + 1;
+                i = if (compare_keys(&key, &keys[i]) == .gt) 2 * i + 2 else 2 * i + 1;
             }
 
             // The upper_bound is the smallest key that is greater than or equal to the
@@ -196,7 +198,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             // not a <= bound. Therefore in the case of an exact match we must use the upper bound.
             const lower_bound: ?u32 = blk: {
                 if (upper_bound) |u| {
-                    if (compare_keys(key, keys[u]) == .eq) break :blk u;
+                    if (compare_keys(&key, &keys[u]) == .eq) break :blk u;
                 }
                 const lower = @as(u64, i + 1) >> ffs((i + 1));
                 break :blk if (lower == 0) null else @intCast(u32, lower - 1);
@@ -304,8 +306,8 @@ const test_eytzinger = struct {
         }
     };
 
-    inline fn compare_keys(a: u32, b: u32) math.Order {
-        return math.order(a, b);
+    inline fn compare_keys(a: *const u32, b: *const u32) math.Order {
+        return math.order(a.*, b.*);
     }
 
     const sentinel_key = math.maxInt(u32);

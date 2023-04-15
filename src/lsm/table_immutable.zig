@@ -41,13 +41,13 @@ pub fn TableImmutableType(comptime Table: type) type {
         pub inline fn key_min(table: *const TableImmutable) Key {
             assert(!table.free);
             assert(table.values.len > 0);
-            return key_from_value(&table.values[0]);
+            return key_from_value(&table.values[0]).value();
         }
 
         pub inline fn key_max(table: *const TableImmutable) Key {
             assert(!table.free);
             assert(table.values.len > 0);
-            return key_from_value(&table.values[table.values.len - 1]);
+            return key_from_value(&table.values[table.values.len - 1]).value();
         }
 
         pub fn deinit(table: *TableImmutable, allocator: mem.Allocator) void {
@@ -91,7 +91,7 @@ pub fn TableImmutableType(comptime Table: type) type {
                     assert(i > 0);
                     const left_key = key_from_value(&sorted_values[i - 1]);
                     const right_key = key_from_value(&sorted_values[i]);
-                    assert(compare_keys(left_key, right_key) == .lt);
+                    assert(compare_keys(left_key.ptr(), right_key.ptr()) == .lt);
                 }
             }
 
@@ -117,7 +117,7 @@ pub fn TableImmutableType(comptime Table: type) type {
             );
             if (result.exact) {
                 const value = &table.values[result.index];
-                if (constants.verify) assert(compare_keys(key, key_from_value(value)) == .eq);
+                if (constants.verify) assert(compare_keys(&key, key_from_value(value).ptr()) == .eq);
                 return value;
             }
 

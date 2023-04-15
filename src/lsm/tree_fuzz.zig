@@ -34,7 +34,7 @@ const Key = packed struct {
         tombstone: u1 = 0,
     };
 
-    inline fn compare_keys(a: Key, b: Key) std.math.Order {
+    inline fn compare_keys(a: *const Key, b: *const Key) std.math.Order {
         return std.math.order(a.id, b.id);
     }
 

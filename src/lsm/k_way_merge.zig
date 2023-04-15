@@ -221,8 +221,8 @@ fn TestContext(comptime k_max: u32) type {
 
         streams: [k_max][]const Value,
 
-        inline fn compare_keys(a: u32, b: u32) math.Order {
-            return math.order(a, b);
+        inline fn compare_keys(a: *const u32, b: *const u32) math.Order {
+            return math.order(a.*, b.*);
         }
 
         fn stream_peek(context: *const Self, stream_index: u32) error{ Empty, Drained }!u32 {

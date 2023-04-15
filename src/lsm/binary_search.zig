@@ -2,6 +2,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 const math = std.math;
 
+const KeyExtractorType = @import("table.zig").KeyExtractorType;
+
 pub const Config = struct {
     verify: bool = false,
 };
@@ -22,8 +24,8 @@ pub const Config = struct {
 pub fn binary_search_values_raw(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
+    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     values: []const Value,
     key: Key,
     comptime config: Config,
@@ -34,7 +36,7 @@ pub fn binary_search_values_raw(
         // Input must be sorted by key.
         for (values) |_, i| {
             assert(i == 0 or
-                compare_keys(key_from_value(&values[i - 1]), key_from_value(&values[i])) != .gt);
+                compare_keys(key_from_value(&values[i - 1]).ptr(), key_from_value(&values[i]).ptr()) != .gt);
         }
     }
 
@@ -54,7 +56,7 @@ pub fn binary_search_values_raw(
         // This trick seems to be what's needed to get llvm to emit branchless code for this,
         // a ternary-style if expression was generated as a jump here for whatever reason.
         const next_offsets = [_]usize{ offset, mid };
-        offset = next_offsets[@boolToInt(compare_keys(key_from_value(&values[mid]), key) == .lt)];
+        offset = next_offsets[@boolToInt(compare_keys(key_from_value(&values[mid]).ptr(), &key) == .lt)];
 
         length -= half;
     }
@@ -67,13 +69,13 @@ pub fn binary_search_values_raw(
             compare_keys(key_from_value(&values[offset + length]), key) != .lt);
     }
 
-    offset += @boolToInt(compare_keys(key_from_value(&values[offset]), key) == .lt);
+    offset += @boolToInt(compare_keys(key_from_value(&values[offset]).ptr(), &key) == .lt);
 
     if (config.verify) {
         assert(offset == 0 or
-            compare_keys(key_from_value(&values[offset - 1]), key) == .lt);
+            compare_keys(key_from_value(&values[offset - 1]).ptr(), &key) == .lt);
         assert(offset == values.len or
-            compare_keys(key_from_value(&values[offset]), key) != .lt);
+            compare_keys(key_from_value(&values[offset]).ptr(), &key) != .lt);
     }
 
     return @intCast(u32, offset);
@@ -81,7 +83,7 @@ pub fn binary_search_values_raw(
 
 pub inline fn binary_search_keys_raw(
     comptime Key: type,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     keys: []const Key,
     key: Key,
     comptime config: Config,
@@ -90,8 +92,10 @@ pub inline fn binary_search_keys_raw(
         Key,
         Key,
         struct {
-            inline fn key_from_key(k: *const Key) Key {
-                return k.*;
+            inline fn key_from_key(k: *const Key) KeyExtractorType(Key, Key) {
+                return .{
+                    .key = k.*,
+                };
             }
         }.key_from_key,
         compare_keys,
@@ -109,8 +113,8 @@ const BinarySearchResult = struct {
 pub inline fn binary_search_values(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
+    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     values: []const Value,
     key: Key,
     comptime config: Config,
@@ -118,13 +122,13 @@ pub inline fn binary_search_values(
     const index = binary_search_values_raw(Key, Value, key_from_value, compare_keys, values, key, config);
     return .{
         .index = index,
-        .exact = index < values.len and compare_keys(key_from_value(&values[index]), key) == .eq,
+        .exact = index < values.len and compare_keys(key_from_value(&values[index]).ptr(), &key) == .eq,
     };
 }
 
 pub inline fn binary_search_keys(
     comptime Key: type,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     keys: []const Key,
     key: Key,
     comptime config: Config,
@@ -132,7 +136,7 @@ pub inline fn binary_search_keys(
     const index = binary_search_keys_raw(Key, compare_keys, keys, key, config);
     return .{
         .index = index,
-        .exact = index < keys.len and compare_keys(keys[index], key) == .eq,
+        .exact = index < keys.len and compare_keys(&keys[index], &key) == .eq,
     };
 }
 
@@ -143,8 +147,8 @@ const test_binary_search = struct {
 
     const gpa = std.testing.allocator;
 
-    inline fn compare_keys(a: u32, b: u32) math.Order {
-        return math.order(a, b);
+    inline fn compare_keys(a: *const u32, b: *const u32) math.Order {
+        return math.order(a.*, b.*);
     }
 
     fn less_than_key(_: void, a: u32, b: u32) bool {

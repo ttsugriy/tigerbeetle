@@ -28,6 +28,27 @@ pub const TableUsage = enum {
     secondary_index,
 };
 
+pub fn KeyExtractorType(
+    comptime TableKey: type,
+    comptime TableValue: type,
+) type {
+    const by_ref = @typeInfo(TableValue) == .Struct and
+        @hasField(TableValue, "key") and
+        std.meta.fieldInfo(TableValue, .key).field_type == TableKey;
+
+    return struct {
+        key: if (by_ref) *const TableKey else TableKey,
+
+        pub inline fn ptr(self: *const @This()) *const TableKey {
+            return if (by_ref) self.key else &self.key;
+        }
+
+        pub inline fn value(self: *const @This()) TableKey {
+            return if (by_ref) self.key.* else self.key;
+        }
+    };
+}
+
 /// A table is a set of blocks:
 ///
 /// * Index block (exactly 1)
@@ -71,10 +92,10 @@ pub fn TableType(
     comptime TableKey: type,
     comptime TableValue: type,
     /// Returns the sort order between two keys.
-    comptime table_compare_keys: fn (TableKey, TableKey) callconv(.Inline) math.Order,
+    comptime table_compare_keys: fn (*const TableKey, *const TableKey) callconv(.Inline) math.Order,
     /// Returns the key for a value. For example, given `object` returns `object.id`.
     /// Since most objects contain an id, this avoids duplicating the key when storing the value.
-    comptime table_key_from_value: fn (*const TableValue) callconv(.Inline) TableKey,
+    comptime table_key_from_value: fn (*const TableValue) callconv(.Inline) KeyExtractorType(TableKey, TableValue),
     /// Must compare greater than all other keys.
     comptime table_sentinel_key: TableKey,
     /// Returns whether a value is a tombstone value.
@@ -102,14 +123,14 @@ pub fn TableType(
         // Export hashmap context for Key and Value
         pub const HashMapContextValue = struct {
             pub fn eql(_: HashMapContextValue, a: Value, b: Value) bool {
-                return compare_keys(key_from_value(&a), key_from_value(&b)) == .eq;
+                return compare_keys(key_from_value(&a).ptr(), key_from_value(&b).ptr()) == .eq;
             }
 
             pub fn hash(_: HashMapContextValue, value: Value) u64 {
                 // TODO(King): this erros out with "unable to hash type void" due to
                 // CompositeKey(T) struct containing .padding which may be void at comptime.
                 const key = key_from_value(&value);
-                return std.hash_map.getAutoHashFn(Key, HashMapContextValue)(.{}, key);
+                return std.hash_map.getAutoHashFn(Key, HashMapContextValue)(.{}, key.value());
             }
         };
 
@@ -530,7 +551,7 @@ pub fn TableType(
                 if (constants.verify) {
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a), key_from_value(b)) == .lt);
+                        assert(compare_keys(key_from_value(a).ptr(), key_from_value(b).ptr()) == .lt);
                         a = b;
                     }
                 }
@@ -557,7 +578,7 @@ pub fn TableType(
 
                 const values_padding = mem.sliceAsBytes(values_max[builder.value_count..]);
                 const block_padding = block[data.padding_offset..][0..data.padding_size];
-                assert(compare_keys(key_from_value(&values[values.len - 1]), key_max) == .eq);
+                assert(compare_keys(key_from_value(&values[values.len - 1]).ptr(), key_max.ptr()) == .eq);
 
                 const header_bytes = block[0..@sizeOf(vsr.Header)];
                 const header = mem.bytesAsValue(vsr.Header, header_bytes);
@@ -575,22 +596,22 @@ pub fn TableType(
                 header.set_checksum();
 
                 const current = builder.data_block_count;
-                index_data_keys(builder.index_block)[current] = key_max;
+                index_data_keys(builder.index_block)[current] = key_max.value();
                 index_data_addresses(builder.index_block)[current] = options.address;
                 index_data_checksums(builder.index_block)[current] = header.checksum;
 
-                if (current == 0) builder.key_min = key_from_value(&values[0]);
-                builder.key_max = key_max;
+                if (current == 0) builder.key_min = key_from_value(&values[0]).value();
+                builder.key_max = key_max.value();
 
                 if (current == 0 and values.len == 1) {
-                    assert(compare_keys(builder.key_min, builder.key_max) == .eq);
+                    assert(compare_keys(&builder.key_min, &builder.key_max) == .eq);
                 } else {
-                    assert(compare_keys(builder.key_min, builder.key_max) == .lt);
+                    assert(compare_keys(&builder.key_min, &builder.key_max) == .lt);
                 }
 
                 if (current > 0) {
                     const key_max_prev = index_data_keys(builder.index_block)[current - 1];
-                    assert(compare_keys(key_max_prev, key_from_value(&values[0])) == .lt);
+                    assert(compare_keys(&key_max_prev, key_from_value(&values[0]).ptr()) == .lt);
                 }
 
                 builder.data_block_count += 1;
@@ -919,14 +940,14 @@ pub fn TableType(
             if (result.exact) {
                 const value = &values[result.index];
                 if (constants.verify) {
-                    assert(compare_keys(key, key_from_value(value)) == .eq);
+                    assert(compare_keys(&key, key_from_value(value).ptr()) == .eq);
                 }
                 return value;
             }
 
             if (constants.verify) {
                 for (data_block_values_used(data_block)) |*value| {
-                    assert(compare_keys(key, key_from_value(value)) != .eq);
+                    assert(compare_keys(&key, key_from_value(value).ptr()) != .eq);
                 }
             }
 
@@ -955,15 +976,15 @@ pub fn TableType(
                 if (values.len > 0) {
                     if (data_block_index == 0) {
                         assert(key_min == null or
-                            compare_keys(key_min.?, key_from_value(&values[0])) == .eq);
+                            compare_keys(&key_min.?, key_from_value(&values[0]).ptr()) == .eq);
                     }
                     if (data_block_index == data_blocks_used - 1) {
                         assert(key_max == null or
-                            compare_keys(key_from_value(&values[values.len - 1]), key_max.?) == .eq);
+                            compare_keys(key_from_value(&values[values.len - 1]).ptr(), &key_max.?) == .eq);
                     }
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a), key_from_value(b)) == .lt);
+                        assert(compare_keys(key_from_value(a).ptr(), key_from_value(b).ptr()) == .lt);
                         a = b;
                     }
                 }

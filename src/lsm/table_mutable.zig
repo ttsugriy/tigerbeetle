@@ -34,7 +34,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
                 }
             }.hash,
             struct {
-                inline fn equal(a: Key, b: Key) bool {
+                inline fn equal(a: *const Key, b: *const Key) bool {
                     return compare_keys(a, b) == .eq;
                 }
             }.equal,
@@ -135,7 +135,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
                     } else {
                         // If the put is already on-disk, then we need to follow it with a tombstone.
                         // The put and the tombstone may cancel each other out later during compaction.
-                        table.values.putAssumeCapacityNoClobber(tombstone_from_key(key_from_value(value)), {});
+                        table.values.putAssumeCapacityNoClobber(tombstone_from_key(key_from_value(value).value()), {});
                     }
                 },
                 .general => {
@@ -143,7 +143,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
                     // by the new one if using e.g. putAssumeCapacity(). Instead we must use the lower
                     // level getOrPut() API and manually overwrite the old key.
                     const upsert = table.values.getOrPutAssumeCapacity(value.*);
-                    upsert.key_ptr.* = tombstone_from_key(key_from_value(value));
+                    upsert.key_ptr.* = tombstone_from_key(key_from_value(value).value());
                 },
             }
 
@@ -180,7 +180,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
 
                 if (table.values_cache) |cache| {
                     if (tombstone(value)) {
-                        cache.remove(key_from_value(value));
+                        cache.remove(key_from_value(value).value());
                     } else {
                         cache.insert(value);
                     }
@@ -198,7 +198,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
         }
 
         fn sort_values_by_key_in_ascending_order(_: void, a: Value, b: Value) bool {
-            return compare_keys(key_from_value(&a), key_from_value(&b)) == .lt;
+            return compare_keys(key_from_value(&a).ptr(), key_from_value(&b).ptr()) == .lt;
         }
     };
 }

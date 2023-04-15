@@ -10,6 +10,8 @@ const binary_search_values_raw = @import("binary_search.zig").binary_search_valu
 const binary_search_keys = @import("binary_search.zig").binary_search_keys;
 const Direction = @import("direction.zig").Direction;
 
+const KeyExtractorType = @import("table.zig").KeyExtractorType;
+
 /// A "segmented array" is an array with efficient (amortized) random-insert/remove operations.
 /// Also known as an "unrolled linked list": https://en.wikipedia.org/wiki/Unrolled_linked_list
 ///
@@ -33,8 +35,8 @@ pub fn SortedSegmentedArray(
     comptime NodePool: type,
     comptime element_count_max: u32,
     comptime Key: type,
-    comptime key_from_value: fn (*const T) callconv(.Inline) Key,
-    comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+    comptime key_from_value: fn (*const T) callconv(.Inline) KeyExtractorType(Key, T),
+    comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     comptime options: Options,
 ) type {
     return SegmentedArrayType(T, NodePool, element_count_max, Key, key_from_value, compare_keys, options);
@@ -52,8 +54,8 @@ fn SegmentedArrayType(
     comptime element_count_max: u32,
     // Set when the SegmentedArray is ordered:
     comptime Key: ?type,
-    comptime key_from_value: if (Key) |K| (fn (*const T) callconv(.Inline) K) else void,
-    comptime compare_keys: if (Key) |K| (fn (K, K) callconv(.Inline) math.Order) else void,
+    comptime key_from_value: if (Key) |K| (fn (*const T) callconv(.Inline) KeyExtractorType(K, T)) else void,
+    comptime compare_keys: if (Key) |K| (fn (*const K, *const K) callconv(.Inline) math.Order) else void,
     comptime options: Options,
 ) type {
     return struct {
@@ -201,7 +203,7 @@ fn SegmentedArrayType(
             ) u32 {
                 if (options.verify) array.verify();
 
-                const cursor = array.search(key_from_value(&element));
+                const cursor = array.search(key_from_value(&element).value());
                 const absolute_index = array.absolute_index_for_cursor(cursor);
                 array.insert_elements_at_absolute_index(node_pool, absolute_index, &[_]T{element});
 
@@ -709,8 +711,8 @@ fn SegmentedArrayType(
             assert(absolute_index <= array.len());
 
             const result = binary_search_keys(u32, struct {
-                inline fn compare(a: u32, b: u32) math.Order {
-                    return math.order(a, b);
+                inline fn compare(a: *const u32, b: *const u32) math.Order {
+                    return math.order(a.*, b.*);
                 }
             }.compare, array.indexes[0..array.node_count], absolute_index, .{});
 
@@ -864,7 +866,7 @@ fn SegmentedArrayType(
                     // This trick seems to be what's needed to get llvm to emit branchless code for this,
                     // a ternary-style if expression was generated as a jump here for whatever reason.
                     const next_offsets = [_]usize{ offset, mid };
-                    offset = next_offsets[@boolToInt(compare_keys(key_from_value(node), key) == .lt)];
+                    offset = next_offsets[@boolToInt(compare_keys(key_from_value(node).ptr(), &key) == .lt)];
 
                     length -= half;
                 }
@@ -1246,8 +1248,8 @@ pub fn run_tests(seed: u64, comptime options: Options) !void {
     ));
 
     const CompareInt = struct {
-        inline fn compare_keys(a: u32, b: u32) std.math.Order {
-            return std.math.order(a, b);
+        inline fn compare_keys(a: *const u32, b: *const u32) std.math.Order {
+            return std.math.order(a.*, b.*);
         }
 
         inline fn key_from_value(value: *const u32) u32 {
@@ -1256,8 +1258,8 @@ pub fn run_tests(seed: u64, comptime options: Options) !void {
     };
 
     const CompareTable = struct {
-        inline fn compare_keys(a: u64, b: u64) std.math.Order {
-            return std.math.order(a, b);
+        inline fn compare_keys(a: *const u64, b: *const u64) std.math.Order {
+            return std.math.order(a.*, b.*);
         }
 
         inline fn key_from_value(value: *const TableInfo) u64 {

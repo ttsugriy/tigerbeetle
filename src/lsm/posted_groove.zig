@@ -7,6 +7,7 @@ const mem = std.mem;
 const constants = @import("../constants.zig");
 
 const TableType = @import("table.zig").TableType;
+const KeyExtractorType = @import("table.zig").KeyExtractorType;
 const TreeType = @import("tree.zig").TreeType;
 const GridType = @import("grid.zig").GridType;
 const NodePool = @import("node_pool.zig").NodePool(constants.lsm_manifest_node_size, 16);
@@ -37,12 +38,14 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 assert(@bitSizeOf(Value) == 32 * 8);
             }
 
-            inline fn compare_keys(a: u128, b: u128) math.Order {
-                return math.order(a, b);
+            inline fn compare_keys(a: *const u128, b: *const u128) math.Order {
+                return math.order(a.*, b.*);
             }
 
-            inline fn key_from_value(value: *const Value) u128 {
-                return value.id;
+            inline fn key_from_value(value: *const Value) KeyExtractorType(u128, Value) {
+                return .{
+                    .key = value.id,
+                };
             }
 
             const sentinel_key = math.maxInt(u128);
