@@ -142,7 +142,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
             layout: *const [keys_count + 1]Key,
             values: []const Value,
-            key: Key,
+            key: *const Key,
         ) []const Value {
             assert(values.len > 0);
             assert(values.len <= values_max);
@@ -186,7 +186,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             var i: u32 = 0;
             while (i < keys.len) {
                 // TODO use @prefetch when available: https://github.com/ziglang/zig/issues/3600
-                i = if (compare_keys(&key, &keys[i]) == .gt) 2 * i + 2 else 2 * i + 1;
+                i = if (compare_keys(key, &keys[i]) == .gt) 2 * i + 2 else 2 * i + 1;
             }
 
             // The upper_bound is the smallest key that is greater than or equal to the
@@ -198,7 +198,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             // not a <= bound. Therefore in the case of an exact match we must use the upper bound.
             const lower_bound: ?u32 = blk: {
                 if (upper_bound) |u| {
-                    if (compare_keys(&key, &keys[u]) == .eq) break :blk u;
+                    if (compare_keys(key, &keys[u]) == .eq) break :blk u;
                 }
                 const lower = @as(u64, i + 1) >> ffs((i + 1));
                 break :blk if (lower == 0) null else @intCast(u32, lower - 1);
@@ -224,10 +224,10 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
         /// TODO examine the generated machine code for this function
         pub fn search_keys(
             comptime Key: type,
-            comptime compare_keys: fn (Key, Key) callconv(.Inline) math.Order,
+            comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
             layout: *const [keys_count + 1]Key,
             values_count: u32,
-            key: Key,
+            key: *const Key,
         ) ?u32 {
             // See search_values() for the explanation and full implementation of the algorithm.
             // This code is duplicated here to avoid unnecessary computation when only searching
@@ -237,7 +237,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             var i: u32 = 0;
             while (i < keys.len) {
                 // TODO use @prefetch when available: https://github.com/ziglang/zig/issues/3600
-                i = if (compare_keys(key, keys[i]) == .gt) 2 * i + 2 else 2 * i + 1;
+                i = if (compare_keys(key, &keys[i]) == .gt) 2 * i + 2 else 2 * i + 1;
             }
             const upper = @as(u64, i + 1) >> ffs(~(i + 1));
 

@@ -379,7 +379,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 assert(context.index_block_count > 0);
                 assert(context.index_block_count <= constants.lsm_levels);
 
-                const blocks = Table.index_blocks_for_key(index_block, context.key);
+                const blocks = Table.index_blocks_for_key(index_block, &context.key);
 
                 context.data_block = .{
                     .address = blocks.data_block_address,
@@ -436,7 +436,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 assert(context.index_block_count > 0);
                 assert(context.index_block_count <= constants.lsm_levels);
 
-                if (Table.data_block_search(data_block, context.key)) |value| {
+                if (Table.data_block_search(data_block, &context.key)) |value| {
                     context.callback(context, unwrap_tombstone(value));
                 } else {
                     // The key is not present in this table, check the next level.

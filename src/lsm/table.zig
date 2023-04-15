@@ -833,7 +833,7 @@ pub fn TableType(
 
         /// Returns the zero-based index of the data block that may contain the key.
         /// May be called on an index block only when the key is in range of the table.
-        inline fn index_data_block_for_key(index_block: BlockPtrConst, key: Key) u32 {
+        inline fn index_data_block_for_key(index_block: BlockPtrConst, key: *const Key) u32 {
             // Because we store key_max in the index block we can use the raw binary search
             // here and avoid the extra comparison. If the search finds an exact match, we
             // want to return that data block. If the search does not find an exact match
@@ -859,7 +859,7 @@ pub fn TableType(
 
         /// Returns all data stored in the index block relating to a given key.
         /// May be called on an index block only when the key is in range of the table.
-        pub inline fn index_blocks_for_key(index_block: BlockPtrConst, key: Key) IndexBlocks {
+        pub inline fn index_blocks_for_key(index_block: BlockPtrConst, key: *const Key) IndexBlocks {
             const d = Table.index_data_block_for_key(index_block, key);
             const f = @divFloor(d, filter.data_block_count_max);
 
@@ -906,7 +906,7 @@ pub fn TableType(
             return filter_block[filter.filter_offset..][0..filter.filter_size];
         }
 
-        pub fn data_block_search(data_block: BlockPtrConst, key: Key) ?*const Value {
+        pub fn data_block_search(data_block: BlockPtrConst, key: *const Key) ?*const Value {
             const values = blk: {
                 if (data.key_count == 0) break :blk data_block_values_used(data_block);
 
@@ -940,14 +940,14 @@ pub fn TableType(
             if (result.exact) {
                 const value = &values[result.index];
                 if (constants.verify) {
-                    assert(compare_keys(&key, key_from_value(value).ptr()) == .eq);
+                    assert(compare_keys(key, key_from_value(value).ptr()) == .eq);
                 }
                 return value;
             }
 
             if (constants.verify) {
                 for (data_block_values_used(data_block)) |*value| {
-                    assert(compare_keys(&key, key_from_value(value).ptr()) != .eq);
+                    assert(compare_keys(key, key_from_value(value).ptr()) != .eq);
                 }
             }
 

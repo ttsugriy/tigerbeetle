@@ -114,7 +114,7 @@ pub fn TableImmutableType(comptime Table: type) type {
                 key_from_value,
                 compare_keys,
                 table.values,
-                key.*, //PENDING:
+                key,
                 .{},
             );
             if (result.exact) {

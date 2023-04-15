@@ -714,7 +714,7 @@ fn SegmentedArrayType(
                 inline fn compare(a: *const u32, b: *const u32) math.Order {
                     return math.order(a.*, b.*);
                 }
-            }.compare, array.indexes[0..array.node_count], absolute_index, .{});
+            }.compare, array.indexes[0..array.node_count], &absolute_index, .{});
 
             if (result.exact) {
                 return .{
@@ -886,7 +886,7 @@ fn SegmentedArrayType(
                     key_from_value,
                     compare_keys,
                     array.node_elements(node),
-                    key.*,
+                    key,
                     .{},
                 );
 
@@ -1214,7 +1214,7 @@ fn TestContext(
             }
         }
 
-        fn reference_index(context: *const Self, key: Key) u32 {
+        fn reference_index(context: *const Self, key: *const Key) u32 {
             return binary_search_values_raw(
                 Key,
                 T,
