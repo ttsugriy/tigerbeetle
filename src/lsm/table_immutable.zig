@@ -17,6 +17,7 @@ pub fn TableImmutableType(comptime Table: type) type {
     const value_count_max = Table.value_count_max;
     const compare_keys = Table.compare_keys;
     const key_from_value = Table.key_from_value;
+    const key_ref = KeyHelper(Key, Value).key_ref;
 
     return struct {
         const TableImmutable = @This();
@@ -41,13 +42,13 @@ pub fn TableImmutableType(comptime Table: type) type {
             return table.values.ptr[0..value_count_max];
         }
 
-        pub inline fn key_min(table: *const TableImmutable) KeyHelper(Key, Value).KeyFromValue {
+        pub inline fn key_min(table: *const TableImmutable) Key {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[0]);
         }
 
-        pub inline fn key_max(table: *const TableImmutable) KeyHelper(Key, Value).KeyFromValue {
+        pub inline fn key_max(table: *const TableImmutable) Key {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[table.values.len - 1]);
@@ -92,9 +93,9 @@ pub fn TableImmutableType(comptime Table: type) type {
                 var i: usize = 1;
                 while (i < sorted_values.len) : (i += 1) {
                     assert(i > 0);
-                    const left_key = key_from_value(&sorted_values[i - 1]);
-                    const right_key = key_from_value(&sorted_values[i]);
-                    assert(compare_keys(left_key.ref(), right_key.ref()) == .lt);
+                    const left_key = key_ref(&key_from_value(&sorted_values[i - 1]));
+                    const right_key = key_ref(&key_from_value(&sorted_values[i]));
+                    assert(compare_keys(left_key, right_key) == .lt);
                 }
             }
 
@@ -120,7 +121,9 @@ pub fn TableImmutableType(comptime Table: type) type {
             );
             if (result.exact) {
                 const value = &table.values[result.index];
-                if (constants.verify) assert(compare_keys(key, key_from_value(value).ref()) == .eq);
+                if (constants.verify) {
+                    assert(compare_keys(key, key_ref(&key_from_value(value))) == .eq);
+                }
                 return value;
             }
 

@@ -25,10 +25,8 @@ fn ObjectTreeHelpers(comptime Object: type) type {
             return std.math.order(timestamp_a, timestamp_b);
         }
 
-        inline fn key_from_value(value: *const Object) KeyHelper(u64, Object).KeyFromValue {
-            return .{
-                .key = value.timestamp & ~@as(u64, tombstone_bit),
-            };
+        inline fn key_from_value(value: *const Object) u64 {
+            return value.timestamp & ~@as(u64, tombstone_bit);
         }
 
         const sentinel_key = std.math.maxInt(u64);
@@ -61,10 +59,8 @@ const IdTreeValue = extern struct {
         return @call(.{ .modifier = .always_inline }, std.math.order, .{ a.*, b.* });
     }
 
-    inline fn key_from_value(value: *const IdTreeValue) KeyHelper(u128, IdTreeValue).KeyFromValue {
-        return .{
-            .key = value.id,
-        };
+    inline fn key_from_value(value: *const IdTreeValue) u128 {
+        return value.id;
     }
 
     const sentinel_key = std.math.maxInt(u128);

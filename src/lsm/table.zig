@@ -43,44 +43,11 @@ pub fn KeyHelper(
     return struct {
         pub const KeyRef = if (key_pass_by_ref) *const TableKey else TableKey;
 
-        pub const KeyFromValueFn = fn (*const TableValue) callconv(.Inline) KeyFromValue;
+        pub const KeyFromValueFn = fn (*const TableValue) callconv(.Inline) TableKey;
         pub const CompareKeysFn = fn (KeyRef, KeyRef) callconv(.Inline) math.Order;
         pub const TombstoneFromKeyFn = fn (KeyRef) callconv(.Inline) TableValue;
         pub const HashFn = fn (KeyRef) callconv(.Inline) u64;
         pub const EqualFn = fn (KeyRef, KeyRef) callconv(.Inline) bool;
-
-        pub const KeyFromValue = if (TableValue == TableKey)
-            struct {
-                key: *const TableKey,
-
-                pub inline fn ref(self: *const @This()) KeyRef {
-                    if (comptime key_pass_by_ref) {
-                        return self.key;
-                    } else {
-                        return self.key.*;
-                    }
-                }
-
-                pub inline fn deref(self: *const @This()) TableKey {
-                    return self.key.*;
-                }
-            }
-        else
-            struct {
-                key: TableKey,
-
-                pub inline fn ref(self: *const @This()) KeyRef {
-                    if (key_pass_by_ref) {
-                        return &self.key;
-                    } else {
-                        return self.key;
-                    }
-                }
-
-                pub inline fn deref(self: *const @This()) TableKey {
-                    return self.key;
-                }
-            };
 
         pub inline fn key_ref(key: *const TableKey) KeyRef {
             if (comptime key_pass_by_ref) {
@@ -177,14 +144,17 @@ pub fn TableType(
         // Export hashmap context for Key and Value
         pub const HashMapContextValue = struct {
             pub fn eql(_: HashMapContextValue, a: Value, b: Value) bool {
-                return compare_keys(key_from_value(&a).ref(), key_from_value(&b).ref()) == .eq;
+                return compare_keys(
+                    key_ref(&key_from_value(&a)),
+                    key_ref(&key_from_value(&b)),
+                ) == .eq;
             }
 
             pub fn hash(_: HashMapContextValue, value: Value) u64 {
                 // TODO(King): this erros out with "unable to hash type void" due to
                 // CompositeKey(T) struct containing .padding which may be void at comptime.
                 const key = key_from_value(&value);
-                return std.hash_map.getAutoHashFn(Key, HashMapContextValue)(.{}, key.deref());
+                return std.hash_map.getAutoHashFn(Key, HashMapContextValue)(.{}, key);
             }
         };
 
@@ -605,7 +575,10 @@ pub fn TableType(
                 if (constants.verify) {
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a).ref(), key_from_value(b).ref()) == .lt);
+                        assert(compare_keys(
+                            key_ref(&key_from_value(a)),
+                            key_ref(&key_from_value(b)),
+                        ) == .lt);
                         a = b;
                     }
                 }
@@ -632,7 +605,10 @@ pub fn TableType(
 
                 const values_padding = mem.sliceAsBytes(values_max[builder.value_count..]);
                 const block_padding = block[data.padding_offset..][0..data.padding_size];
-                assert(compare_keys(key_from_value(&values[values.len - 1]).ref(), key_max.ref()) == .eq);
+                assert(compare_keys(
+                    key_ref(&key_from_value(&values[values.len - 1])),
+                    key_ref(&key_max),
+                ) == .eq);
 
                 const header_bytes = block[0..@sizeOf(vsr.Header)];
                 const header = mem.bytesAsValue(vsr.Header, header_bytes);
@@ -650,12 +626,12 @@ pub fn TableType(
                 header.set_checksum();
 
                 const current = builder.data_block_count;
-                index_data_keys(builder.index_block)[current] = key_max.deref();
+                index_data_keys(builder.index_block)[current] = key_max;
                 index_data_addresses(builder.index_block)[current] = options.address;
                 index_data_checksums(builder.index_block)[current] = header.checksum;
 
-                if (current == 0) builder.key_min = key_from_value(&values[0]).deref();
-                builder.key_max = key_max.deref();
+                if (current == 0) builder.key_min = key_from_value(&values[0]);
+                builder.key_max = key_max;
 
                 if (current == 0 and values.len == 1) {
                     assert(compare_keys(builder.get_key_min(), builder.get_key_max()) == .eq);
@@ -665,7 +641,10 @@ pub fn TableType(
 
                 if (current > 0) {
                     const key_max_prev = &index_data_keys(builder.index_block)[current - 1];
-                    assert(compare_keys(key_ref(key_max_prev), key_from_value(&values[0]).ref()) == .lt);
+                    assert(compare_keys(
+                        key_ref(key_max_prev),
+                        key_ref(&key_from_value(&values[0])),
+                    ) == .lt);
                 }
 
                 builder.data_block_count += 1;
@@ -1010,14 +989,14 @@ pub fn TableType(
             if (result.exact) {
                 const value = &values[result.index];
                 if (constants.verify) {
-                    assert(compare_keys(key, key_from_value(value).ref()) == .eq);
+                    assert(compare_keys(key, key_ref(&key_from_value(value))) == .eq);
                 }
                 return value;
             }
 
             if (constants.verify) {
                 for (data_block_values_used(data_block)) |*value| {
-                    assert(compare_keys(key, key_from_value(value).ref()) != .eq);
+                    assert(compare_keys(key, key_ref(&key_from_value(value))) != .eq);
                 }
             }
 
@@ -1046,15 +1025,18 @@ pub fn TableType(
                 if (values.len > 0) {
                     if (data_block_index == 0) {
                         assert(key_min == null or
-                            compare_keys(key_min.?, key_from_value(&values[0]).ref()) == .eq);
+                            compare_keys(key_min.?, key_ref(&key_from_value(&values[0]))) == .eq);
                     }
                     if (data_block_index == data_blocks_used - 1) {
                         assert(key_max == null or
-                            compare_keys(key_from_value(&values[values.len - 1]).ref(), key_max.?) == .eq);
+                            compare_keys(
+                            key_ref(&key_from_value(&values[values.len - 1])),
+                            key_max.?,
+                        ) == .eq);
                     }
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a).ref(), key_from_value(b).ref()) == .lt);
+                        assert(compare_keys(key_ref(&key_from_value(a)), key_ref(&key_from_value(b))) == .lt);
                         a = b;
                     }
                 }

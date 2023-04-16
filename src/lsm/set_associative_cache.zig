@@ -86,6 +86,7 @@ pub fn SetAssociativeCache(
     assert(clock_hands_per_line > 0);
 
     const KeyRef = KeyHelper(Key, Value).KeyRef;
+    const key_ref = KeyHelper(Key, Value).key_ref;
 
     return struct {
         const Self = @This();
@@ -243,7 +244,7 @@ pub fn SetAssociativeCache(
             var it = BitIterator(Ways){ .bits = ways };
             while (it.next()) |way| {
                 const count = self.counts.get(set.offset + way);
-                if (count > 0 and equal(key_from_value(&set.values[way]).ref(), key)) {
+                if (count > 0 and equal(key_ref(&key_from_value(&set.values[way])), key)) {
                     return way;
                 }
             }
@@ -270,9 +271,9 @@ pub fn SetAssociativeCache(
         /// Insert a value, evicting an older entry if needed.
         /// Return the index at which the value was inserted.
         pub fn insert_index(self: *Self, value: *const Value) usize {
-            const key = key_from_value(value);
-            const set = self.associate(key.ref());
-            if (self.search(&set, key.ref())) |way| {
+            const key = key_ref(&key_from_value(value));
+            const set = self.associate(key);
+            if (self.search(&set, key)) |way| {
                 // Overwrite the old entry for this key.
                 self.counts.set(set.offset + way, 1);
                 set.values[way] = value.*;

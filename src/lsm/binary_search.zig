@@ -32,11 +32,16 @@ pub fn binary_search_values_raw(
 ) u32 {
     if (values.len == 0) return 0;
 
+    const key_ref = KeyHelper(Key, Value).key_ref;
+
     if (config.verify) {
         // Input must be sorted by key.
         for (values) |_, i| {
             assert(i == 0 or
-                compare_keys(key_from_value(&values[i - 1]).ref(), key_from_value(&values[i]).ref()) != .gt);
+                compare_keys(
+                key_ref(&key_from_value(&values[i - 1])),
+                key_ref(&key_from_value(&values[i])),
+            ) != .gt);
         }
     }
 
@@ -45,9 +50,9 @@ pub fn binary_search_values_raw(
     while (length > 1) {
         if (config.verify) {
             assert(offset == 0 or
-                compare_keys(key_from_value(&values[offset - 1]).ref(), key) != .gt);
+                compare_keys(key_ref(&key_from_value(&values[offset - 1])), key) != .gt);
             assert(offset + length == values.len or
-                compare_keys(key_from_value(&values[offset + length]).ref(), key) != .lt);
+                compare_keys(key_ref(&key_from_value(&values[offset + length])), key) != .lt);
         }
 
         const half = length / 2;
@@ -56,7 +61,12 @@ pub fn binary_search_values_raw(
         // This trick seems to be what's needed to get llvm to emit branchless code for this,
         // a ternary-style if expression was generated as a jump here for whatever reason.
         const next_offsets = [_]usize{ offset, mid };
-        offset = next_offsets[@boolToInt(compare_keys(key_from_value(&values[mid]).ref(), key) == .lt)];
+        offset = next_offsets[
+            @boolToInt(compare_keys(
+                key_ref(&key_from_value(&values[mid])),
+                key,
+            ) == .lt)
+        ];
 
         length -= half;
     }
@@ -64,18 +74,18 @@ pub fn binary_search_values_raw(
     if (config.verify) {
         assert(length == 1);
         assert(offset == 0 or
-            compare_keys(key_from_value(&values[offset - 1]).ref(), key) != .gt);
+            compare_keys(key_ref(&key_from_value(&values[offset - 1])), key) != .gt);
         assert(offset + length == values.len or
-            compare_keys(key_from_value(&values[offset + length]).ref(), key) != .lt);
+            compare_keys(key_ref(&key_from_value(&values[offset + length])), key) != .lt);
     }
 
-    offset += @boolToInt(compare_keys(key_from_value(&values[offset]).ref(), key) == .lt);
+    offset += @boolToInt(compare_keys(key_ref(&key_from_value(&values[offset])), key) == .lt);
 
     if (config.verify) {
         assert(offset == 0 or
-            compare_keys(key_from_value(&values[offset - 1]).ref(), key) == .lt);
+            compare_keys(key_ref(&key_from_value(&values[offset - 1])), key) == .lt);
         assert(offset == values.len or
-            compare_keys(key_from_value(&values[offset]).ref(), key) != .lt);
+            compare_keys(key_ref(&key_from_value(&values[offset])), key) != .lt);
     }
 
     return @intCast(u32, offset);
@@ -92,10 +102,8 @@ pub inline fn binary_search_keys_raw(
         Key,
         Key,
         struct {
-            inline fn key_from_key(k: *const Key) KeyHelper(Key, Key).KeyFromValue {
-                return .{
-                    .key = k,
-                };
+            inline fn key_from_key(k: *const Key) Key {
+                return k.*;
             }
         }.key_from_key,
         compare_keys,
@@ -119,10 +127,22 @@ pub inline fn binary_search_values(
     key: KeyHelper(Key, Value).KeyRef,
     comptime config: Config,
 ) BinarySearchResult {
-    const index = binary_search_values_raw(Key, Value, key_from_value, compare_keys, values, key, config);
+    const key_ref = KeyHelper(Key, Value).key_ref;
+    const index = binary_search_values_raw(
+        Key,
+        Value,
+        key_from_value,
+        compare_keys,
+        values,
+        key,
+        config,
+    );
     return .{
         .index = index,
-        .exact = index < values.len and compare_keys(key_from_value(&values[index]).ref(), key) == .eq,
+        .exact = index < values.len and compare_keys(
+            key_ref(&key_from_value(&values[index])),
+            key,
+        ) == .eq,
     };
 }
 

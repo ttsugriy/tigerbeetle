@@ -7,7 +7,6 @@ pub fn CompositeKey(comptime Field: type) type {
 
     return packed struct {
         const Self = @This();
-        const KeyHelper = @import("table.zig").KeyHelper(Self, Value);
 
         pub const sentinel_key: Self = .{
             .field = math.maxInt(Field),
@@ -57,11 +56,11 @@ pub fn CompositeKey(comptime Field: type) type {
             }
         }
 
-        pub inline fn key_from_value(value: *const Value) KeyHelper.KeyFromValue {
-            return .{ .key = .{
+        pub inline fn key_from_value(value: *const Value) Self {
+            return .{
                 .field = value.field,
                 .timestamp = @truncate(u63, value.timestamp),
-            } };
+            };
         }
 
         pub inline fn tombstone(value: *const Value) bool {

@@ -46,10 +46,8 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 );
             }
 
-            inline fn key_from_value(value: *const Value) KeyHelper(u128, Value).KeyFromValue {
-                return .{
-                    .key = value.id,
-                };
+            inline fn key_from_value(value: *const Value) u128 {
+                return value.id;
             }
 
             const sentinel_key = math.maxInt(u128);

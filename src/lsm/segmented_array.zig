@@ -194,7 +194,9 @@ fn SegmentedArrayType(
             }
         }
 
-        pub usingnamespace if (Key) |_| struct {
+        pub usingnamespace if (Key) |K| struct {
+            const key_ref = KeyHelper(K, T).key_ref;
+
             /// Returns the absolute index of the element being inserted.
             pub fn insert_element(
                 array: *Self,
@@ -203,7 +205,7 @@ fn SegmentedArrayType(
             ) u32 {
                 if (options.verify) array.verify();
 
-                const cursor = array.search(key_from_value(&element).ref());
+                const cursor = array.search(key_ref(&key_from_value(&element)));
                 const absolute_index = array.absolute_index_for_cursor(cursor);
                 array.insert_elements_at_absolute_index(node_pool, absolute_index, &[_]T{element});
 
@@ -843,6 +845,8 @@ fn SegmentedArrayType(
         }
 
         pub usingnamespace if (Key) |K| struct {
+            const key_ref = KeyHelper(K, T).key_ref;
+
             /// Returns a cursor to the index of the key either exactly equal to the target key or,
             /// if there is no exact match, the next greatest key.
             pub fn search(
@@ -866,7 +870,12 @@ fn SegmentedArrayType(
                     // This trick seems to be what's needed to get llvm to emit branchless code for this,
                     // a ternary-style if expression was generated as a jump here for whatever reason.
                     const next_offsets = [_]usize{ offset, mid };
-                    offset = next_offsets[@boolToInt(compare_keys(key_from_value(node).ref(), key) == .lt)];
+                    offset = next_offsets[
+                        @boolToInt(compare_keys(
+                            key_ref(&key_from_value(node)),
+                            key,
+                        ) == .lt)
+                    ];
 
                     length -= half;
                 }

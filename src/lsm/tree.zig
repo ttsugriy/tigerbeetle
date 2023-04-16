@@ -78,6 +78,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
     const KeyRef = KeyHelper(Key, Value).KeyRef;
     const compare_keys = TreeTable.compare_keys;
     const tombstone = TreeTable.tombstone;
+    const key_ref = KeyHelper(Key, Value).key_ref;
     const key_deref = KeyHelper(Key, Value).key_deref;
 
     const tree_hash = blk: {
@@ -672,14 +673,20 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
             const level_b: u8 = 0;
             const range = tree.manifest.compaction_range(
                 level_b,
-                tree.table_immutable.key_min().ref(),
-                tree.table_immutable.key_max().ref(),
+                key_ref(&tree.table_immutable.key_min()),
+                key_ref(&tree.table_immutable.key_max()),
             );
 
             assert(range.table_count >= 1);
             assert(range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(range.get_key_min(), tree.table_immutable.key_min().ref()) != .gt);
-            assert(compare_keys(range.get_key_max(), tree.table_immutable.key_max().ref()) != .lt);
+            assert(compare_keys(
+                range.get_key_min(),
+                key_ref(&tree.table_immutable.key_min()),
+            ) != .gt);
+            assert(compare_keys(
+                range.get_key_max(),
+                key_ref(&tree.table_immutable.key_max()),
+            ) != .lt);
 
             log.debug(tree_name ++
                 ": compacting immutable table to level 0 " ++

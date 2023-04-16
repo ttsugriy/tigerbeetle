@@ -111,10 +111,8 @@ pub fn GridType(comptime Storage: type) type {
         const cache_interface = struct {
             const KeyHelper = @import("table.zig").KeyHelper(u64, u64);
 
-            inline fn address_from_address(address: *const u64) KeyHelper.KeyFromValue {
-                return .{
-                    .key = address,
-                };
+            inline fn address_from_address(address: *const u64) u64 {
+                return address.*;
             }
 
             inline fn hash_address(address: u64) u64 {

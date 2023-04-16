@@ -34,10 +34,8 @@ pub fn ManifestLevelType(
             table_count_max,
             Key,
             struct {
-                inline fn key_from_value(value: *const Key) KeyHelper(Key, Key).KeyFromValue {
-                    return .{
-                        .key = value,
-                    };
+                inline fn key_from_value(value: *const Key) Key {
+                    return value.*;
                 }
             }.key_from_value,
             compare_keys,

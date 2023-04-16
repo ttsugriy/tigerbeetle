@@ -123,7 +123,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
 
             for (tree) |values_index, i| {
                 if (values_index < values.len) {
-                    layout[i + 1] = key_from_value(&values[values_index]).deref();
+                    layout[i + 1] = key_from_value(&values[values_index]);
                 } else {
                     layout[i + 1] = sentinel_key;
                 }
