@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
+const trait = std.meta.trait;
 const assert = std.debug.assert;
 
 const constants = @import("../constants.zig");
@@ -8,6 +9,7 @@ const constants = @import("../constants.zig");
 const Direction = @import("direction.zig").Direction;
 const ManifestType = @import("manifest.zig").ManifestType;
 const GridType = @import("grid.zig").GridType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 /// A LevelIndexIterator iterates the index blocks of every table in a key range in ascending key order.
 pub fn LevelIndexIteratorType(comptime Table: type, comptime Storage: type) type {
@@ -18,6 +20,7 @@ pub fn LevelIndexIteratorType(comptime Table: type, comptime Storage: type) type
         const BlockPtrConst = Grid.BlockPtrConst;
         const Manifest = ManifestType(Table, Storage);
         const TableInfo = Manifest.TableInfo;
+        const KeyRef = KeyHelper(Table.Key, Table.Value).KeyRef;
 
         pub const Context = struct {
             grid: *Grid,
@@ -27,6 +30,22 @@ pub fn LevelIndexIteratorType(comptime Table: type, comptime Storage: type) type
             key_min: Key,
             key_max: Key,
             direction: Direction,
+
+            pub inline fn get_key_min(context: *const Context) KeyRef {
+                if (comptime trait.isSingleItemPtr(KeyRef)) {
+                    return &context.key_min;
+                } else {
+                    return context.key_min;
+                }
+            }
+
+            pub inline fn get_key_max(context: *const Context) KeyRef {
+                if (comptime trait.isSingleItemPtr(KeyRef)) {
+                    return &context.key_max;
+                } else {
+                    return context.key_max;
+                }
+            }
         };
 
         pub const Callback = fn (
@@ -91,9 +110,9 @@ pub fn LevelIndexIteratorType(comptime Table: type, comptime Storage: type) type
             const next_table_info = it.context.manifest.next_table(
                 it.context.level,
                 it.context.snapshot,
-                it.context.key_min,
-                it.context.key_max,
-                it.key_exclusive,
+                it.context.get_key_min(),
+                it.context.get_key_max(),
+                it.get_key_exclusive(),
                 it.context.direction,
             );
             if (next_table_info) |table_info| {
@@ -139,6 +158,14 @@ pub fn LevelIndexIteratorType(comptime Table: type, comptime Storage: type) type
             const callback = it.callback.next_tick;
             it.callback = .none;
             callback(it, null, null);
+        }
+
+        pub inline fn get_key_exclusive(it: *const LevelIndexIterator) ?KeyRef {
+            if (comptime trait.isSingleItemPtr(KeyRef)) {
+                return if (it.key_exclusive) |*k| k else null;
+            } else {
+                return if (it.key_exclusive) |k| k else null;
+            }
         }
     };
 }

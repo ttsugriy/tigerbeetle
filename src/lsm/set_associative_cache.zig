@@ -85,6 +85,8 @@ pub fn SetAssociativeCache(
     const clock_hands_per_line = @divExact(layout.cache_line_size * 8, clock_hand_bits);
     assert(clock_hands_per_line > 0);
 
+    const KeyRef = KeyHelper(Key, Value).KeyRef;
+
     return struct {
         const Self = @This();
 
@@ -196,7 +198,7 @@ pub fn SetAssociativeCache(
             mem.set(u64, self.clocks.words, 0);
         }
 
-        pub fn get_index(self: *Self, key: *const Key) ?usize {
+        pub fn get_index(self: *Self, key: KeyRef) ?usize {
             const set = self.associate(key);
             if (self.search(&set, key)) |way| {
                 self.hits += 1;
@@ -211,13 +213,13 @@ pub fn SetAssociativeCache(
             }
         }
 
-        pub fn get(self: *Self, key: *const Key) ?*align(value_alignment) Value {
+        pub fn get(self: *Self, key: KeyRef) ?*align(value_alignment) Value {
             const index = self.get_index(key) orelse return null;
             return @alignCast(value_alignment, &self.values[index]);
         }
 
         /// Remove a key from the set associative cache if present.
-        pub fn remove(self: *Self, key: *const Key) void {
+        pub fn remove(self: *Self, key: KeyRef) void {
             const set = self.associate(key);
             const way = self.search(&set, key) orelse return;
 
@@ -227,7 +229,7 @@ pub fn SetAssociativeCache(
 
         /// Hint that the key is less likely to be accessed in the future, without actually removing
         /// it from the cache.
-        pub fn demote(self: *Self, key: *const Key) void {
+        pub fn demote(self: *Self, key: KeyRef) void {
             const set = self.associate(key);
             const way = self.search(&set, key) orelse return;
 
@@ -235,13 +237,13 @@ pub fn SetAssociativeCache(
         }
 
         /// If the key is present in the set, returns the way. Otherwise returns null.
-        inline fn search(self: *const Self, set: *const Set, key: *const Key) ?usize {
+        inline fn search(self: *const Self, set: *const Set, key: KeyRef) ?usize {
             const ways = search_tags(set.tags, set.tag);
 
             var it = BitIterator(Ways){ .bits = ways };
             while (it.next()) |way| {
                 const count = self.counts.get(set.offset + way);
-                if (count > 0 and equal(key_from_value(&set.values[way]).ptr(), key)) {
+                if (count > 0 and equal(key_from_value(&set.values[way]).ref(), key)) {
                     return way;
                 }
             }
@@ -269,8 +271,8 @@ pub fn SetAssociativeCache(
         /// Return the index at which the value was inserted.
         pub fn insert_index(self: *Self, value: *const Value) usize {
             const key = key_from_value(value);
-            const set = self.associate(key.ptr());
-            if (self.search(&set, key.ptr())) |way| {
+            const set = self.associate(key.ref());
+            if (self.search(&set, key.ref())) |way| {
                 // Overwrite the old entry for this key.
                 self.counts.set(set.offset + way, 1);
                 set.values[way] = value.*;
@@ -347,7 +349,7 @@ pub fn SetAssociativeCache(
             }
         };
 
-        inline fn associate(self: *Self, key: *const Key) Set {
+        inline fn associate(self: *Self, key: KeyRef) Set {
             const entropy = hash(key);
 
             const tag = @truncate(Tag, entropy >> math.log2_int(u64, self.sets));

@@ -38,11 +38,11 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 assert(@bitSizeOf(Value) == 32 * 8);
             }
 
-            inline fn compare_keys(a: *const u128, b: *const u128) math.Order {
-                return math.order(a.*, b.*);
+            inline fn compare_keys(a: u128, b: u128) math.Order {
+                return math.order(a, b);
             }
 
-            inline fn key_from_value(value: *const Value) KeyHelper(u128, Value).KeyExtractor {
+            inline fn key_from_value(value: *const Value) KeyHelper(u128, Value).KeyFromValue {
                 return .{
                     .key = value.id,
                 };
@@ -54,9 +54,9 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 return value.data == .tombstone;
             }
 
-            inline fn tombstone_from_key(id: *const u128) Value {
+            inline fn tombstone_from_key(id: u128) Value {
                 return .{
-                    .id = id.*,
+                    .id = id,
                     .data = .tombstone,
                 };
             }
@@ -179,7 +179,7 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
         /// We tolerate duplicate IDs enqueued by the state machine.
         /// For example, if all unique operations require the same two dependencies.
         pub fn prefetch_enqueue(groove: *PostedGroove, id: u128) void {
-            if (groove.tree.lookup_from_memory(groove.prefetch_snapshot.?, &id)) |value| {
+            if (groove.tree.lookup_from_memory(groove.prefetch_snapshot.?, id)) |value| {
                 assert(value.id == id);
                 switch (value.data) {
                     .posted => groove.prefetch_objects.putAssumeCapacity(value.id, true),
@@ -273,7 +273,10 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
 
                 if (constants.verify) {
                     // This was checked in prefetch_enqueue().
-                    assert(worker.context.groove.tree.lookup_from_memory(worker.context.snapshot, id) == null);
+                    assert(worker.context.groove.tree.lookup_from_memory(
+                        worker.context.snapshot,
+                        id.*,
+                    ) == null);
                 }
 
                 // If not in the LSM tree's cache, the object must be read from disk and added
@@ -284,7 +287,7 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                     lookup_id_callback,
                     &worker.lookup_id,
                     worker.context.snapshot,
-                    id,
+                    id.*,
                 );
             }
 

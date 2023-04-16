@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
+const trait = std.meta.trait;
 const assert = std.debug.assert;
 
 const constants = @import("../constants.zig");
@@ -28,32 +29,81 @@ pub const TableUsage = enum {
     secondary_index,
 };
 
+/// Provides types and functions to abstract the way we pass keys by ref or by value.
+/// Numeric keys, such as u64 and u128 are more efficient passed by value, while structs
+/// like `CompositeKey` are always passed by reference.
 pub fn KeyHelper(
     comptime TableKey: type,
     comptime TableValue: type,
 ) type {
-    const by_ref = @typeInfo(TableValue) == .Struct and
-        @hasField(TableValue, "key") and
-        std.meta.fieldInfo(TableValue, .key).field_type == TableKey;
+    comptime assert(TableKey != void and @sizeOf(TableKey) > 0);
+
+    const key_pass_by_ref = !trait.isNumber(TableKey) and
+        @sizeOf(TableKey) > @sizeOf(usize);
 
     return struct {
-        pub const KeyExtractor = struct {
-            key: if (by_ref) *const TableKey else TableKey,
+        pub const KeyRef = if (key_pass_by_ref) *const TableKey else TableKey;
 
-            pub inline fn ptr(self: *const @This()) *const TableKey {
-                return if (by_ref) self.key else &self.key;
+        pub const KeyFromValueFn = fn (*const TableValue) callconv(.Inline) KeyFromValue;
+        pub const CompareKeysFn = fn (KeyRef, KeyRef) callconv(.Inline) math.Order;
+        pub const TombstoneFromKeyFn = fn (KeyRef) callconv(.Inline) TableValue;
+        pub const HashFn = fn (KeyRef) callconv(.Inline) u64;
+        pub const EqualFn = fn (KeyRef, KeyRef) callconv(.Inline) bool;
+
+        pub const KeyFromValue = if (TableValue == TableKey)
+            struct {
+                key: *const TableKey,
+
+                pub inline fn ref(self: *const @This()) KeyRef {
+                    if (comptime key_pass_by_ref) {
+                        return self.key;
+                    } else {
+                        return self.key.*;
+                    }
+                }
+
+                pub inline fn deref(self: *const @This()) TableKey {
+                    return self.key.*;
+                }
             }
+        else
+            struct {
+                const key_extract_by_ref = @typeInfo(TableValue) == .Struct and
+                    @hasField(TableValue, "key") and
+                    std.meta.fieldInfo(TableValue, .key).field_type == TableKey;
 
-            pub inline fn value(self: *const @This()) TableKey {
-                return if (by_ref) self.key.* else self.key;
+                key: if (key_extract_by_ref) *const TableKey else TableKey,
+
+                pub inline fn ref(self: *const @This()) KeyRef {
+                    if (comptime key_extract_by_ref and !key_pass_by_ref) {
+                        return self.key.*;
+                    } else if (comptime key_pass_by_ref and !key_extract_by_ref) {
+                        return &self.key;
+                    } else {
+                        return self.key;
+                    }
+                }
+
+                pub inline fn deref(self: *const @This()) TableKey {
+                    return if (key_extract_by_ref) self.key.* else self.key;
+                }
+            };
+
+        pub inline fn key_ref(key: *const TableKey) KeyRef {
+            if (comptime key_pass_by_ref) {
+                return key;
+            } else {
+                return key.*;
             }
-        };
+        }
 
-        pub const CompareKeysFn = fn (*const TableKey, *const TableKey) callconv(.Inline) math.Order;
-        pub const KeyFromValueFn = fn (*const TableValue) callconv(.Inline) KeyExtractor;
-        pub const TombstoneFromKeyFn = fn (*const TableKey) callconv(.Inline) TableValue;
-        pub const HashFn = fn (*const TableKey) callconv(.Inline) u64;
-        pub const EqualFn = fn (*const TableKey, *const TableKey) callconv(.Inline) bool;
+        pub inline fn key_deref(key: KeyRef) TableKey {
+            if (comptime key_pass_by_ref) {
+                return key.*;
+            } else {
+                return key;
+            }
+        }
     };
 }
 
@@ -114,6 +164,9 @@ pub fn TableType(
     comptime table_value_count_max: usize,
     comptime usage: TableUsage,
 ) type {
+    const KeyRef = KeyHelper(TableKey, TableValue).KeyRef;
+    const key_ref = KeyHelper(TableKey, TableValue).key_ref;
+
     return struct {
         const Table = @This();
 
@@ -131,14 +184,14 @@ pub fn TableType(
         // Export hashmap context for Key and Value
         pub const HashMapContextValue = struct {
             pub fn eql(_: HashMapContextValue, a: Value, b: Value) bool {
-                return compare_keys(key_from_value(&a).ptr(), key_from_value(&b).ptr()) == .eq;
+                return compare_keys(key_from_value(&a).ref(), key_from_value(&b).ref()) == .eq;
             }
 
             pub fn hash(_: HashMapContextValue, value: Value) u64 {
                 // TODO(King): this erros out with "unable to hash type void" due to
                 // CompositeKey(T) struct containing .padding which may be void at comptime.
                 const key = key_from_value(&value);
-                return std.hash_map.getAutoHashFn(Key, HashMapContextValue)(.{}, key.value());
+                return std.hash_map.getAutoHashFn(Key, HashMapContextValue)(.{}, key.deref());
             }
         };
 
@@ -559,7 +612,7 @@ pub fn TableType(
                 if (constants.verify) {
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a).ptr(), key_from_value(b).ptr()) == .lt);
+                        assert(compare_keys(key_from_value(a).ref(), key_from_value(b).ref()) == .lt);
                         a = b;
                     }
                 }
@@ -586,7 +639,7 @@ pub fn TableType(
 
                 const values_padding = mem.sliceAsBytes(values_max[builder.value_count..]);
                 const block_padding = block[data.padding_offset..][0..data.padding_size];
-                assert(compare_keys(key_from_value(&values[values.len - 1]).ptr(), key_max.ptr()) == .eq);
+                assert(compare_keys(key_from_value(&values[values.len - 1]).ref(), key_max.ref()) == .eq);
 
                 const header_bytes = block[0..@sizeOf(vsr.Header)];
                 const header = mem.bytesAsValue(vsr.Header, header_bytes);
@@ -604,22 +657,22 @@ pub fn TableType(
                 header.set_checksum();
 
                 const current = builder.data_block_count;
-                index_data_keys(builder.index_block)[current] = key_max.value();
+                index_data_keys(builder.index_block)[current] = key_max.deref();
                 index_data_addresses(builder.index_block)[current] = options.address;
                 index_data_checksums(builder.index_block)[current] = header.checksum;
 
-                if (current == 0) builder.key_min = key_from_value(&values[0]).value();
-                builder.key_max = key_max.value();
+                if (current == 0) builder.key_min = key_from_value(&values[0]).deref();
+                builder.key_max = key_max.deref();
 
                 if (current == 0 and values.len == 1) {
-                    assert(compare_keys(&builder.key_min, &builder.key_max) == .eq);
+                    assert(compare_keys(builder.get_key_min(), builder.get_key_max()) == .eq);
                 } else {
-                    assert(compare_keys(&builder.key_min, &builder.key_max) == .lt);
+                    assert(compare_keys(builder.get_key_min(), builder.get_key_max()) == .lt);
                 }
 
                 if (current > 0) {
-                    const key_max_prev = index_data_keys(builder.index_block)[current - 1];
-                    assert(compare_keys(&key_max_prev, key_from_value(&values[0]).ptr()) == .lt);
+                    const key_max_prev = &index_data_keys(builder.index_block)[current - 1];
+                    assert(compare_keys(key_ref(key_max_prev), key_from_value(&values[0]).ref()) == .lt);
                 }
 
                 builder.data_block_count += 1;
@@ -737,6 +790,22 @@ pub fn TableType(
 
                 return info;
             }
+
+            pub inline fn get_key_min(builder: *const Builder) KeyRef {
+                if (comptime trait.isSingleItemPtr(KeyRef)) {
+                    return &builder.key_min;
+                } else {
+                    return builder.key_min;
+                }
+            }
+
+            pub inline fn get_key_max(builder: *const Builder) KeyRef {
+                if (comptime trait.isSingleItemPtr(KeyRef)) {
+                    return &builder.key_max;
+                } else {
+                    return builder.key_max;
+                }
+            }
         };
 
         pub inline fn index_block_address(index_block: BlockPtrConst) u64 {
@@ -841,7 +910,7 @@ pub fn TableType(
 
         /// Returns the zero-based index of the data block that may contain the key.
         /// May be called on an index block only when the key is in range of the table.
-        inline fn index_data_block_for_key(index_block: BlockPtrConst, key: *const Key) u32 {
+        inline fn index_data_block_for_key(index_block: BlockPtrConst, key: KeyRef) u32 {
             // Because we store key_max in the index block we can use the raw binary search
             // here and avoid the extra comparison. If the search finds an exact match, we
             // want to return that data block. If the search does not find an exact match
@@ -867,7 +936,7 @@ pub fn TableType(
 
         /// Returns all data stored in the index block relating to a given key.
         /// May be called on an index block only when the key is in range of the table.
-        pub inline fn index_blocks_for_key(index_block: BlockPtrConst, key: *const Key) IndexBlocks {
+        pub inline fn index_blocks_for_key(index_block: BlockPtrConst, key: KeyRef) IndexBlocks {
             const d = Table.index_data_block_for_key(index_block, key);
             const f = @divFloor(d, filter.data_block_count_max);
 
@@ -914,7 +983,7 @@ pub fn TableType(
             return filter_block[filter.filter_offset..][0..filter.filter_size];
         }
 
-        pub fn data_block_search(data_block: BlockPtrConst, key: *const Key) ?*const Value {
+        pub fn data_block_search(data_block: BlockPtrConst, key: KeyRef) ?*const Value {
             const values = blk: {
                 if (data.key_count == 0) break :blk data_block_values_used(data_block);
 
@@ -948,14 +1017,14 @@ pub fn TableType(
             if (result.exact) {
                 const value = &values[result.index];
                 if (constants.verify) {
-                    assert(compare_keys(key, key_from_value(value).ptr()) == .eq);
+                    assert(compare_keys(key, key_from_value(value).ref()) == .eq);
                 }
                 return value;
             }
 
             if (constants.verify) {
                 for (data_block_values_used(data_block)) |*value| {
-                    assert(compare_keys(key, key_from_value(value).ptr()) != .eq);
+                    assert(compare_keys(key, key_from_value(value).ref()) != .eq);
                 }
             }
 
@@ -966,8 +1035,8 @@ pub fn TableType(
             comptime Storage: type,
             storage: *Storage,
             index_address: u64,
-            key_min: ?Key,
-            key_max: ?Key,
+            key_min: ?KeyRef,
+            key_max: ?KeyRef,
         ) void {
             if (Storage != @import("../testing/storage.zig").Storage)
                 // Too complicated to do async verification
@@ -984,15 +1053,15 @@ pub fn TableType(
                 if (values.len > 0) {
                     if (data_block_index == 0) {
                         assert(key_min == null or
-                            compare_keys(&key_min.?, key_from_value(&values[0]).ptr()) == .eq);
+                            compare_keys(key_min.?, key_from_value(&values[0]).ref()) == .eq);
                     }
                     if (data_block_index == data_blocks_used - 1) {
                         assert(key_max == null or
-                            compare_keys(key_from_value(&values[values.len - 1]).ptr(), &key_max.?) == .eq);
+                            compare_keys(key_from_value(&values[values.len - 1]).ref(), key_max.?) == .eq);
                     }
                     var a = &values[0];
                     for (values[1..]) |*b| {
-                        assert(compare_keys(key_from_value(a).ptr(), key_from_value(b).ptr()) == .lt);
+                        assert(compare_keys(key_from_value(a).ref(), key_from_value(b).ref()) == .lt);
                         a = b;
                     }
                 }

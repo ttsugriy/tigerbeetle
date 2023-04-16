@@ -13,6 +13,7 @@ const snapshot_latest = @import("tree.zig").snapshot_latest;
 pub fn TableImmutableType(comptime Table: type) type {
     const Key = Table.Key;
     const Value = Table.Value;
+    const KeyRef = KeyHelper(Key, Value).KeyRef;
     const value_count_max = Table.value_count_max;
     const compare_keys = Table.compare_keys;
     const key_from_value = Table.key_from_value;
@@ -40,13 +41,13 @@ pub fn TableImmutableType(comptime Table: type) type {
             return table.values.ptr[0..value_count_max];
         }
 
-        pub inline fn key_min(table: *const TableImmutable) KeyHelper(Key, Value).KeyExtractor {
+        pub inline fn key_min(table: *const TableImmutable) KeyHelper(Key, Value).KeyFromValue {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[0]);
         }
 
-        pub inline fn key_max(table: *const TableImmutable) KeyHelper(Key, Value).KeyExtractor {
+        pub inline fn key_max(table: *const TableImmutable) KeyHelper(Key, Value).KeyFromValue {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[table.values.len - 1]);
@@ -93,7 +94,7 @@ pub fn TableImmutableType(comptime Table: type) type {
                     assert(i > 0);
                     const left_key = key_from_value(&sorted_values[i - 1]);
                     const right_key = key_from_value(&sorted_values[i]);
-                    assert(compare_keys(left_key.ptr(), right_key.ptr()) == .lt);
+                    assert(compare_keys(left_key.ref(), right_key.ref()) == .lt);
                 }
             }
 
@@ -105,7 +106,7 @@ pub fn TableImmutableType(comptime Table: type) type {
         }
 
         // TODO(ifreund) This would be great to unit test.
-        pub fn get(table: *const TableImmutable, key: *const Key) ?*const Value {
+        pub fn get(table: *const TableImmutable, key: KeyRef) ?*const Value {
             assert(!table.free);
 
             const result = binary_search.binary_search_values(
@@ -119,7 +120,7 @@ pub fn TableImmutableType(comptime Table: type) type {
             );
             if (result.exact) {
                 const value = &table.values[result.index];
-                if (constants.verify) assert(compare_keys(key, key_from_value(value).ptr()) == .eq);
+                if (constants.verify) assert(compare_keys(key, key_from_value(value).ref()) == .eq);
                 return value;
             }
 

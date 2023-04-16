@@ -203,7 +203,7 @@ fn SegmentedArrayType(
             ) u32 {
                 if (options.verify) array.verify();
 
-                const cursor = array.search(key_from_value(&element).ptr());
+                const cursor = array.search(key_from_value(&element).ref());
                 const absolute_index = array.absolute_index_for_cursor(cursor);
                 array.insert_elements_at_absolute_index(node_pool, absolute_index, &[_]T{element});
 
@@ -711,10 +711,10 @@ fn SegmentedArrayType(
             assert(absolute_index <= array.len());
 
             const result = binary_search_keys(u32, struct {
-                inline fn compare(a: *const u32, b: *const u32) math.Order {
-                    return math.order(a.*, b.*);
+                inline fn compare(a: u32, b: u32) math.Order {
+                    return math.order(a, b);
                 }
-            }.compare, array.indexes[0..array.node_count], &absolute_index, .{});
+            }.compare, array.indexes[0..array.node_count], absolute_index, .{});
 
             if (result.exact) {
                 return .{
@@ -847,7 +847,7 @@ fn SegmentedArrayType(
             /// if there is no exact match, the next greatest key.
             pub fn search(
                 array: *const Self,
-                key: *const K,
+                key: KeyHelper(K, T).KeyRef,
             ) Cursor {
                 if (array.node_count == 0) {
                     return .{
@@ -866,7 +866,7 @@ fn SegmentedArrayType(
                     // This trick seems to be what's needed to get llvm to emit branchless code for this,
                     // a ternary-style if expression was generated as a jump here for whatever reason.
                     const next_offsets = [_]usize{ offset, mid };
-                    offset = next_offsets[@boolToInt(compare_keys(key_from_value(node).ptr(), key) == .lt)];
+                    offset = next_offsets[@boolToInt(compare_keys(key_from_value(node).ref(), key) == .lt)];
 
                     length -= half;
                 }
@@ -920,6 +920,8 @@ fn TestContext(
     comptime element_order: enum { sorted, unsorted },
     comptime options: Options,
 ) type {
+    const KeyRef = KeyHelper(Key, T).KeyRef;
+
     return struct {
         const Self = @This();
 
@@ -1214,7 +1216,7 @@ fn TestContext(
             }
         }
 
-        fn reference_index(context: *const Self, key: *const Key) u32 {
+        fn reference_index(context: *const Self, key: KeyRef) u32 {
             return binary_search_values_raw(
                 Key,
                 T,

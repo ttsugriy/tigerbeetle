@@ -1,16 +1,19 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
+const trait = std.meta.trait;
 const assert = std.debug.assert;
 
 const constants = @import("../constants.zig");
 const div_ceil = @import("../stdx.zig").div_ceil;
 const SetAssociativeCache = @import("set_associative_cache.zig").SetAssociativeCache;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 /// Range queries are not supported on the TableMutable, it must first be made immutable.
 pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) type {
     const Key = Table.Key;
     const Value = Table.Value;
+    const KeyRef = KeyHelper(Key, Value).KeyRef;
     const compare_keys = Table.compare_keys;
     const key_from_value = Table.key_from_value;
     const tombstone_from_key = Table.tombstone_from_key;
@@ -29,12 +32,17 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
             Value,
             Table.key_from_value,
             struct {
-                inline fn hash(key: *const Key) u64 {
-                    return std.hash.Wyhash.hash(0, mem.asBytes(key));
+                inline fn hash(key: KeyRef) u64 {
+                    return std.hash.Wyhash.hash(0, mem.asBytes(
+                        if (comptime trait.isSingleItemPtr(KeyRef))
+                            key
+                        else
+                            &key,
+                    ));
                 }
             }.hash,
             struct {
-                inline fn equal(a: *const Key, b: *const Key) bool {
+                inline fn equal(a: KeyRef, b: KeyRef) bool {
                     return compare_keys(a, b) == .eq;
                 }
             }.equal,
@@ -84,7 +92,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
             table.values.deinit(allocator);
         }
 
-        pub fn get(table: *const TableMutable, key: *const Key) ?*const Value {
+        pub fn get(table: *const TableMutable, key: KeyRef) ?*const Value {
             if (table.values.getKeyPtr(tombstone_from_key(key))) |value| {
                 return value;
             }
@@ -135,7 +143,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
                     } else {
                         // If the put is already on-disk, then we need to follow it with a tombstone.
                         // The put and the tombstone may cancel each other out later during compaction.
-                        table.values.putAssumeCapacityNoClobber(tombstone_from_key(key_from_value(value).ptr()), {});
+                        table.values.putAssumeCapacityNoClobber(tombstone_from_key(key_from_value(value).ref()), {});
                     }
                 },
                 .general => {
@@ -143,7 +151,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
                     // by the new one if using e.g. putAssumeCapacity(). Instead we must use the lower
                     // level getOrPut() API and manually overwrite the old key.
                     const upsert = table.values.getOrPutAssumeCapacity(value.*);
-                    upsert.key_ptr.* = tombstone_from_key(key_from_value(value).ptr());
+                    upsert.key_ptr.* = tombstone_from_key(key_from_value(value).ref());
                 },
             }
 
@@ -180,7 +188,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
 
                 if (table.values_cache) |cache| {
                     if (tombstone(value)) {
-                        cache.remove(key_from_value(value).ptr());
+                        cache.remove(key_from_value(value).ref());
                     } else {
                         cache.insert(value);
                     }
@@ -198,7 +206,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
         }
 
         fn sort_values_by_key_in_ascending_order(_: void, a: Value, b: Value) bool {
-            return compare_keys(key_from_value(&a).ptr(), key_from_value(&b).ptr()) == .lt;
+            return compare_keys(key_from_value(&a).ref(), key_from_value(&b).ref()) == .lt;
         }
     };
 }

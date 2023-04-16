@@ -57,7 +57,7 @@ pub fn CompositeKey(comptime Field: type) type {
             }
         }
 
-        pub inline fn key_from_value(value: *const Value) KeyHelper.KeyExtractor {
+        pub inline fn key_from_value(value: *const Value) KeyHelper.KeyFromValue {
             return .{ .key = .{
                 .field = value.field,
                 .timestamp = @truncate(u63, value.timestamp),

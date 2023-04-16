@@ -5,6 +5,7 @@ const assert = std.debug.assert;
 const math = std.math;
 const mem = std.mem;
 const os = std.os;
+const trait = std.meta.trait;
 
 const log = std.log.scoped(.tree);
 const tracer = @import("../tracer.zig");
@@ -18,6 +19,7 @@ const bloom_filter = @import("bloom_filter.zig");
 const CompositeKey = @import("composite_key.zig").CompositeKey;
 const NodePool = @import("node_pool.zig").NodePool(constants.lsm_manifest_node_size, 16);
 const RingBuffer = @import("../ring_buffer.zig").RingBuffer;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 /// We reserve maxInt(u64) to indicate that a table has not been deleted.
 /// Tables that have not been deleted have snapshot_max of maxInt(u64).
@@ -73,8 +75,10 @@ pub const compactions_max = div_ceil(constants.lsm_levels, 2);
 pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_name: [:0]const u8) type {
     const Key = TreeTable.Key;
     const Value = TreeTable.Value;
+    const KeyRef = KeyHelper(Key, Value).KeyRef;
     const compare_keys = TreeTable.compare_keys;
     const tombstone = TreeTable.tombstone;
+    const key_deref = KeyHelper(Key, Value).key_deref;
 
     const tree_hash = blk: {
         // Blake3 hash does alot at comptime..
@@ -259,7 +263,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
         /// Returns the value from the mutable or immutable table (possibly a tombstone),
         /// if one is available for the specified snapshot.
-        pub fn lookup_from_memory(tree: *Tree, snapshot: u64, key: *const Key) ?*const Value {
+        pub fn lookup_from_memory(tree: *Tree, snapshot: u64, key: KeyRef) ?*const Value {
             assert(tree.lookup_snapshot_max >= snapshot);
 
             if (tree.lookup_snapshot_max == snapshot) {
@@ -286,7 +290,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
             callback: fn (*LookupContext, ?*const Value) void,
             context: *LookupContext,
             snapshot: u64,
-            key: *const Key,
+            key: KeyRef,
         ) void {
             assert(tree.lookup_snapshot_max >= snapshot);
             if (constants.verify) {
@@ -301,8 +305,8 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 var it = tree.manifest.lookup(snapshot, key);
                 while (it.next()) |table| : (index_block_count += 1) {
                     assert(table.visible(snapshot));
-                    assert(compare_keys(&table.key_min, key) != .gt);
-                    assert(compare_keys(&table.key_max, key) != .lt);
+                    assert(compare_keys(table.get_key_min(), key) != .gt);
+                    assert(compare_keys(table.get_key_max(), key) != .lt);
 
                     index_block_addresses[index_block_count] = table.address;
                     index_block_checksums[index_block_count] = table.checksum;
@@ -315,13 +319,17 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
             }
 
             // Hash the key to the fingerprint only once and reuse for all bloom filter checks.
-            const fingerprint = bloom_filter.Fingerprint.create(mem.asBytes(key));
+            const fingerprint = bloom_filter.Fingerprint.create(
+                mem.asBytes(
+                    if (comptime trait.isSingleItemPtr(KeyRef)) key else &key,
+                ),
+            );
 
             context.* = .{
                 .tree = tree,
                 .completion = undefined,
 
-                .key = key.*,
+                .key = key_deref(key),
                 .fingerprint = fingerprint,
 
                 .index_block_count = index_block_count,
@@ -379,7 +387,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 assert(context.index_block_count > 0);
                 assert(context.index_block_count <= constants.lsm_levels);
 
-                const blocks = Table.index_blocks_for_key(index_block, &context.key);
+                const blocks = Table.index_blocks_for_key(index_block, context.get_key());
 
                 context.data_block = .{
                     .address = blocks.data_block_address,
@@ -436,7 +444,7 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                 assert(context.index_block_count > 0);
                 assert(context.index_block_count <= constants.lsm_levels);
 
-                if (Table.data_block_search(data_block, &context.key)) |value| {
+                if (Table.data_block_search(data_block, context.get_key())) |value| {
                     context.callback(context, unwrap_tombstone(value));
                 } else {
                     // The key is not present in this table, check the next level.
@@ -459,6 +467,14 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
                 context.data_block = null;
                 context.read_index_block();
+            }
+
+            pub inline fn get_key(context: *const LookupContext) KeyRef {
+                if (comptime trait.isSingleItemPtr(KeyRef)) {
+                    return &context.key;
+                } else {
+                    return context.key;
+                }
             }
         };
 
@@ -656,14 +672,14 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
             const level_b: u8 = 0;
             const range = tree.manifest.compaction_range(
                 level_b,
-                tree.table_immutable.key_min().ptr(),
-                tree.table_immutable.key_max().ptr(),
+                tree.table_immutable.key_min().ref(),
+                tree.table_immutable.key_max().ref(),
             );
 
             assert(range.table_count >= 1);
             assert(range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(&range.key_min, tree.table_immutable.key_min().ptr()) != .gt);
-            assert(compare_keys(&range.key_max, tree.table_immutable.key_max().ptr()) != .lt);
+            assert(compare_keys(range.get_key_min(), tree.table_immutable.key_min().ref()) != .gt);
+            assert(compare_keys(range.get_key_max(), tree.table_immutable.key_max().ref()) != .lt);
 
             log.debug(tree_name ++
                 ": compacting immutable table to level 0 " ++
@@ -700,9 +716,9 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
 
             assert(table_range.range.table_count >= 1);
             assert(table_range.range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(&table.key_min, &table.key_max) != .gt);
-            assert(compare_keys(&table_range.range.key_min, &table.key_min) != .gt);
-            assert(compare_keys(&table_range.range.key_max, &table.key_max) != .lt);
+            assert(compare_keys(table.get_key_min(), table.get_key_max()) != .gt);
+            assert(compare_keys(table_range.range.get_key_min(), table.get_key_min()) != .gt);
+            assert(compare_keys(table_range.range.get_key_max(), table.get_key_max()) != .lt);
 
             log.debug(tree_name ++ ": compacting {d} tables from level {d} to level {d}", .{
                 table_range.range.table_count,
@@ -773,8 +789,8 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                         tree.manifest.remove_invisible_tables(
                             tree.compaction_table_immutable.context.level_b,
                             tree.lookup_snapshot_max,
-                            tree.compaction_table_immutable.context.range_b.key_min,
-                            tree.compaction_table_immutable.context.range_b.key_max,
+                            tree.compaction_table_immutable.context.range_b.get_key_min(),
+                            tree.compaction_table_immutable.context.range_b.get_key_max(),
                         );
                         tree.compaction_table_immutable.reset();
                         tree.table_immutable.clear();
@@ -793,15 +809,15 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
                         tree.manifest.remove_invisible_tables(
                             context.compaction.context.level_b,
                             tree.lookup_snapshot_max,
-                            context.compaction.context.range_b.key_min,
-                            context.compaction.context.range_b.key_max,
+                            context.compaction.context.range_b.get_key_min(),
+                            context.compaction.context.range_b.get_key_max(),
                         );
                         if (context.compaction.context.level_b > 0) {
                             tree.manifest.remove_invisible_tables(
                                 context.compaction.context.level_b - 1,
                                 tree.lookup_snapshot_max,
-                                context.compaction.context.range_b.key_min,
-                                context.compaction.context.range_b.key_max,
+                                context.compaction.context.range_b.get_key_min(),
+                                context.compaction.context.range_b.get_key_max(),
                             );
                         }
                         context.compaction.reset();

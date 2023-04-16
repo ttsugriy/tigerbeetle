@@ -123,7 +123,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
 
             for (tree) |values_index, i| {
                 if (values_index < values.len) {
-                    layout[i + 1] = key_from_value(&values[values_index]).value();
+                    layout[i + 1] = key_from_value(&values[values_index]).deref();
                 } else {
                     layout[i + 1] = sentinel_key;
                 }
@@ -142,10 +142,11 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             comptime compare_keys: KeyHelper(Key, Value).CompareKeysFn,
             layout: *const [keys_count + 1]Key,
             values: []const Value,
-            key: *const Key,
+            key: KeyHelper(Key, Value).KeyRef,
         ) []const Value {
             assert(values.len > 0);
             assert(values.len <= values_max);
+            const key_ref = KeyHelper(Key, Value).key_ref;
 
             const keys = layout[1..];
 
@@ -186,7 +187,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             var i: u32 = 0;
             while (i < keys.len) {
                 // TODO use @prefetch when available: https://github.com/ziglang/zig/issues/3600
-                i = if (compare_keys(key, &keys[i]) == .gt) 2 * i + 2 else 2 * i + 1;
+                i = if (compare_keys(key, key_ref(&keys[i])) == .gt) 2 * i + 2 else 2 * i + 1;
             }
 
             // The upper_bound is the smallest key that is greater than or equal to the
@@ -198,7 +199,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             // not a <= bound. Therefore in the case of an exact match we must use the upper bound.
             const lower_bound: ?u32 = blk: {
                 if (upper_bound) |u| {
-                    if (compare_keys(key, &keys[u]) == .eq) break :blk u;
+                    if (compare_keys(key, key_ref(&keys[u])) == .eq) break :blk u;
                 }
                 const lower = @as(u64, i + 1) >> ffs((i + 1));
                 break :blk if (lower == 0) null else @intCast(u32, lower - 1);
@@ -227,7 +228,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
             comptime compare_keys: KeyHelper(Key, Key).CompareKeysFn,
             layout: *const [keys_count + 1]Key,
             values_count: u32,
-            key: *const Key,
+            key: KeyHelper(Key, Key).KeyRef,
         ) ?u32 {
             // See search_values() for the explanation and full implementation of the algorithm.
             // This code is duplicated here to avoid unnecessary computation when only searching

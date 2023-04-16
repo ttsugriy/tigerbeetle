@@ -48,6 +48,7 @@ const TableInfoType = @import("manifest.zig").TableInfoType;
 const ManifestType = @import("manifest.zig").ManifestType;
 const TableDataIteratorType = @import("table_data_iterator.zig").TableDataIteratorType;
 const LevelDataIteratorType = @import("level_data_iterator.zig").LevelDataIteratorType;
+const KeyHelper = @import("table.zig").KeyHelper;
 
 pub fn CompactionType(
     comptime Table: type,
@@ -72,6 +73,7 @@ pub fn CompactionType(
         const compare_keys = Table.compare_keys;
         const key_from_value = Table.key_from_value;
         const tombstone = Table.tombstone;
+        const key_ref = KeyHelper(Table.Key, Table.Value).key_ref;
 
         pub const TableInfoA = union(enum) {
             immutable: []const Value,
@@ -444,13 +446,13 @@ pub fn CompactionType(
                 if (values_in.len > 0) {
                     const first_key = key_from_value(&values_in[0]);
                     const last_key = key_from_value(&values_in[values_in.len - 1]);
-                    if (compaction.last_keys_in[index]) |last_key_prev| {
-                        assert(compare_keys(&last_key_prev, first_key.ptr()) == .lt);
+                    if (compaction.last_keys_in[index]) |*last_key_prev| {
+                        assert(compare_keys(key_ref(last_key_prev), first_key.ref()) == .lt);
                     }
                     if (values_in.len > 1) {
-                        assert(compare_keys(first_key.ptr(), last_key.ptr()) == .lt);
+                        assert(compare_keys(first_key.ref(), last_key.ref()) == .lt);
                     }
-                    compaction.last_keys_in[index] = last_key.value();
+                    compaction.last_keys_in[index] = last_key.deref();
                 }
             } else {
                 // If no more data blocks available, just leave `values_in[index]` empty.
@@ -581,7 +583,7 @@ pub fn CompactionType(
             {
                 const value_a = &values_in_a[values_in_a_index];
                 const value_b = &values_in_b[values_in_b_index];
-                switch (compare_keys(key_from_value(value_a).ptr(), key_from_value(value_b).ptr())) {
+                switch (compare_keys(key_from_value(value_a).ref(), key_from_value(value_b).ref())) {
                     .lt => {
                         values_in_a_index += 1;
                         if (compaction.drop_tombstones and
