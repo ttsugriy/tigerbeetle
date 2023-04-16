@@ -57,8 +57,8 @@ const IdTreeValue = extern struct {
         assert(@bitSizeOf(IdTreeValue) == 32 * 8);
     }
 
-    inline fn compare_keys(a: u128, b: u128) std.math.Order {
-        return std.math.order(a, b);
+    inline fn compare_keys(a: *const u128, b: *const u128) std.math.Order {
+        return @call(.{ .modifier = .always_inline }, std.math.order, .{ a.*, b.* });
     }
 
     inline fn key_from_value(value: *const IdTreeValue) KeyHelper(u128, IdTreeValue).KeyFromValue {
@@ -74,9 +74,9 @@ const IdTreeValue = extern struct {
         return (value.timestamp & tombstone_bit) != 0;
     }
 
-    inline fn tombstone_from_key(id: u128) IdTreeValue {
+    inline fn tombstone_from_key(id: *const u128) IdTreeValue {
         return .{
-            .id = id,
+            .id = id.*,
             .timestamp = tombstone_bit,
         };
     }
@@ -413,7 +413,10 @@ pub fn GrooveType(
 
         const primary_field = if (has_id) "id" else "timestamp";
         const PrimaryKey = @TypeOf(@field(@as(Object, undefined), primary_field));
+        const PrimaryKeyRef = KeyHelper(PrimaryKey, Object).KeyRef;
         const PrefetchIDs = std.AutoHashMapUnmanaged(PrimaryKey, void);
+
+        const key_deref = KeyHelper(PrimaryKey, Object).key_deref;
 
         const PrefetchObjectsContext = struct {
             pub fn hash(_: PrefetchObjectsContext, object: Object) u64 {
@@ -547,8 +550,9 @@ pub fn GrooveType(
             groove.* = undefined;
         }
 
-        pub fn get(groove: *const Groove, key: PrimaryKey) ?*const Object {
-            return groove.prefetch_objects.getKeyPtrAdapted(key, PrefetchObjectsAdapter{});
+        pub inline fn get(groove: *const Groove, key: PrimaryKeyRef) ?*const Object {
+            // TODO: vendor hashtable to accept pointers.
+            return groove.prefetch_objects.getKeyPtrAdapted(key_deref(key), PrefetchObjectsAdapter{});
         }
 
         /// Must be called directly before the state machine begins queuing ids for prefetch.
@@ -578,9 +582,9 @@ pub fn GrooveType(
         /// This must be called by the state machine for every key to be prefetched.
         /// We tolerate duplicate IDs enqueued by the state machine.
         /// For example, if all unique operations require the same two dependencies.
-        pub fn prefetch_enqueue(groove: *Groove, key: PrimaryKey) void {
+        pub fn prefetch_enqueue(groove: *Groove, key: PrimaryKeyRef) void {
             if (!has_id) {
-                groove.prefetch_ids.putAssumeCapacity(key, {});
+                groove.prefetch_ids.putAssumeCapacity(key_deref(key), {});
                 return;
             }
 
@@ -593,16 +597,16 @@ pub fn GrooveType(
                         id_tree_value.timestamp,
                     )) |object| {
                         assert(!ObjectTreeHelpers(Object).tombstone(object));
-                        assert(object.id == key);
+                        assert(object.id == key_deref(key));
                         groove.prefetch_objects.putAssumeCapacity(object.*, {});
                     } else {
                         // The id was in the IdTree's value cache, but not in the ObjectTree's
                         // value cache.
-                        groove.prefetch_ids.putAssumeCapacity(key, {});
+                        groove.prefetch_ids.putAssumeCapacity(key_deref(key), {});
                     }
                 }
             } else {
-                groove.prefetch_ids.putAssumeCapacity(key, {});
+                groove.prefetch_ids.putAssumeCapacity(key_deref(key), {});
             }
         }
 
@@ -695,7 +699,7 @@ pub fn GrooveType(
 
                 if (worker.context.groove.ids.lookup_from_memory(
                     worker.context.snapshot,
-                    id.*,
+                    id,
                 )) |id_tree_value| {
                     assert(!id_tree_value.tombstone());
                     lookup_id_callback(&worker.lookup_id, id_tree_value);
@@ -715,7 +719,7 @@ pub fn GrooveType(
                         lookup_id_callback,
                         &worker.lookup_id,
                         worker.context.snapshot,
-                        id.*,
+                        id,
                     );
                 }
             }
@@ -732,7 +736,7 @@ pub fn GrooveType(
                         assert(
                             worker.context.groove.ids.lookup_from_memory(
                                 worker.context.snapshot,
-                                worker.lookup_id.key,
+                                &worker.lookup_id.key,
                             ) == null or
                                 worker.context.groove.objects.lookup_from_memory(
                                 worker.context.snapshot,

@@ -404,7 +404,7 @@ pub fn StateMachineType(
 
         fn prefetch_create_accounts(self: *StateMachine, accounts: []const Account) void {
             for (accounts) |*a| {
-                self.forest.grooves.accounts_immutable.prefetch_enqueue(a.id);
+                self.forest.grooves.accounts_immutable.prefetch_enqueue(&a.id);
             }
             self.forest.grooves.accounts_immutable.prefetch(
                 prefetch_create_accounts_immutable_callback,
@@ -445,13 +445,13 @@ pub fn StateMachineType(
 
         fn prefetch_create_transfers(self: *StateMachine, transfers: []const Transfer) void {
             for (transfers) |*t| {
-                self.forest.grooves.transfers.prefetch_enqueue(t.id);
+                self.forest.grooves.transfers.prefetch_enqueue(&t.id);
 
                 if (t.flags.post_pending_transfer or t.flags.void_pending_transfer) {
-                    self.forest.grooves.transfers.prefetch_enqueue(t.pending_id);
+                    self.forest.grooves.transfers.prefetch_enqueue(&t.pending_id);
                     // This prefetch isn't run yet, but enqueue it here as well to save an extra
                     // iteration over transfers.
-                    self.forest.grooves.posted.prefetch_enqueue(t.pending_id);
+                    self.forest.grooves.posted.prefetch_enqueue(&t.pending_id);
                 }
             }
 
@@ -467,13 +467,13 @@ pub fn StateMachineType(
             const transfers = mem.bytesAsSlice(Event(.create_transfers), self.prefetch_input.?);
             for (transfers) |*t| {
                 if (t.flags.post_pending_transfer or t.flags.void_pending_transfer) {
-                    if (self.forest.grooves.transfers.get(t.pending_id)) |p| {
-                        self.forest.grooves.accounts_immutable.prefetch_enqueue(p.debit_account_id);
-                        self.forest.grooves.accounts_immutable.prefetch_enqueue(p.credit_account_id);
+                    if (self.forest.grooves.transfers.get(&t.pending_id)) |p| {
+                        self.forest.grooves.accounts_immutable.prefetch_enqueue(&p.debit_account_id);
+                        self.forest.grooves.accounts_immutable.prefetch_enqueue(&p.credit_account_id);
                     }
                 } else {
-                    self.forest.grooves.accounts_immutable.prefetch_enqueue(t.debit_account_id);
-                    self.forest.grooves.accounts_immutable.prefetch_enqueue(t.credit_account_id);
+                    self.forest.grooves.accounts_immutable.prefetch_enqueue(&t.debit_account_id);
+                    self.forest.grooves.accounts_immutable.prefetch_enqueue(&t.credit_account_id);
                 }
             }
 
@@ -489,19 +489,19 @@ pub fn StateMachineType(
             const transfers = mem.bytesAsSlice(Event(.create_transfers), self.prefetch_input.?);
             for (transfers) |*t| {
                 if (t.flags.post_pending_transfer or t.flags.void_pending_transfer) {
-                    if (self.forest.grooves.transfers.get(t.pending_id)) |p| {
-                        if (self.forest.grooves.accounts_immutable.get(p.debit_account_id)) |dr_immut| {
+                    if (self.forest.grooves.transfers.get(&t.pending_id)) |p| {
+                        if (self.forest.grooves.accounts_immutable.get(&p.debit_account_id)) |dr_immut| {
                             self.forest.grooves.accounts_mutable.prefetch_enqueue(dr_immut.timestamp);
                         }
-                        if (self.forest.grooves.accounts_immutable.get(p.credit_account_id)) |cr_immut| {
+                        if (self.forest.grooves.accounts_immutable.get(&p.credit_account_id)) |cr_immut| {
                             self.forest.grooves.accounts_mutable.prefetch_enqueue(cr_immut.timestamp);
                         }
                     }
                 } else {
-                    if (self.forest.grooves.accounts_immutable.get(t.debit_account_id)) |dr_immut| {
+                    if (self.forest.grooves.accounts_immutable.get(&t.debit_account_id)) |dr_immut| {
                         self.forest.grooves.accounts_mutable.prefetch_enqueue(dr_immut.timestamp);
                     }
-                    if (self.forest.grooves.accounts_immutable.get(t.credit_account_id)) |cr_immut| {
+                    if (self.forest.grooves.accounts_immutable.get(&t.credit_account_id)) |cr_immut| {
                         self.forest.grooves.accounts_mutable.prefetch_enqueue(cr_immut.timestamp);
                     }
                 }
@@ -529,7 +529,7 @@ pub fn StateMachineType(
         }
 
         fn prefetch_lookup_accounts(self: *StateMachine, ids: []const u128) void {
-            for (ids) |id| {
+            for (ids) |*id| {
                 self.forest.grooves.accounts_immutable.prefetch_enqueue(id);
             }
 
@@ -543,7 +543,7 @@ pub fn StateMachineType(
             const self = @fieldParentPtr(StateMachine, "prefetch_accounts_immutable_context", completion);
 
             const ids = mem.bytesAsSlice(Event(.lookup_accounts), self.prefetch_input.?);
-            for (ids) |id| {
+            for (ids) |*id| {
                 if (self.forest.grooves.accounts_immutable.get(id)) |immut| {
                     self.forest.grooves.accounts_mutable.prefetch_enqueue(immut.timestamp);
                 }
@@ -562,7 +562,7 @@ pub fn StateMachineType(
         }
 
         fn prefetch_lookup_transfers(self: *StateMachine, ids: []const u128) void {
-            for (ids) |id| {
+            for (ids) |*id| {
                 self.forest.grooves.transfers.prefetch_enqueue(id);
             }
 
@@ -785,7 +785,7 @@ pub fn StateMachineType(
             const results = mem.bytesAsSlice(Account, output[0..output_len]);
             var results_count: usize = 0;
             for (batch) |id| {
-                if (self.forest.grooves.accounts_immutable.get(id)) |immut| {
+                if (self.forest.grooves.accounts_immutable.get(&id)) |immut| {
                     const mut = self.forest.grooves.accounts_mutable.get(immut.timestamp).?;
                     results[results_count] = into_account(immut, mut);
                     results_count += 1;
@@ -797,14 +797,14 @@ pub fn StateMachineType(
         // Transfers that do not fit in the response are omitted.
         fn execute_lookup_transfers(
             self: *StateMachine,
-            input: []const u8,
+            input: []align(16) const u8,
             output: *align(16) [constants.message_body_size_max]u8,
         ) usize {
             const batch = mem.bytesAsSlice(u128, input);
             const output_len = @divFloor(output.len, @sizeOf(Transfer)) * @sizeOf(Transfer);
             const results = mem.bytesAsSlice(Transfer, output[0..output_len]);
             var results_count: usize = 0;
-            for (batch) |id| {
+            for (batch) |*id| {
                 if (self.get_transfer(id)) |result| {
                     results[results_count] = result.*;
                     results_count += 1;
@@ -833,7 +833,7 @@ pub fn StateMachineType(
             if (a.credits_pending != 0) return .credits_pending_must_be_zero;
             if (a.credits_posted != 0) return .credits_posted_must_be_zero;
 
-            if (self.forest.grooves.accounts_immutable.get(a.id)) |e| {
+            if (self.forest.grooves.accounts_immutable.get(&a.id)) |e| {
                 return create_account_exists(a, e);
             }
 
@@ -846,7 +846,7 @@ pub fn StateMachineType(
 
         fn create_account_rollback(self: *StateMachine, a: *const Account) void {
             // Need to get the timestamp from the inserted account rather than the one passed in.
-            const timestamp = self.forest.grooves.accounts_immutable.get(a.id).?.timestamp;
+            const timestamp = self.forest.grooves.accounts_immutable.get(&a.id).?.timestamp;
 
             self.forest.grooves.accounts_immutable.remove(a.id);
             self.forest.grooves.accounts_mutable.remove(timestamp);
@@ -897,8 +897,8 @@ pub fn StateMachineType(
             // 2. standing for debit record and credit record, or
             // 3. relating to debtor and creditor.
             // We use them to distinguish between `cr` (credit account), and `c` (commit).
-            const dr_immut = self.forest.grooves.accounts_immutable.get(t.debit_account_id) orelse return .debit_account_not_found;
-            const cr_immut = self.forest.grooves.accounts_immutable.get(t.credit_account_id) orelse return .credit_account_not_found;
+            const dr_immut = self.forest.grooves.accounts_immutable.get(&t.debit_account_id) orelse return .debit_account_not_found;
+            const cr_immut = self.forest.grooves.accounts_immutable.get(&t.credit_account_id) orelse return .credit_account_not_found;
             assert(dr_immut.id == t.debit_account_id);
             assert(cr_immut.id == t.credit_account_id);
             assert(t.timestamp > dr_immut.timestamp);
@@ -908,7 +908,7 @@ pub fn StateMachineType(
             if (t.ledger != dr_immut.ledger) return .transfer_must_have_the_same_ledger_as_accounts;
 
             // If the transfer already exists, then it must not influence the overflow or limit checks.
-            if (self.get_transfer(t.id)) |e| return create_transfer_exists(t, e);
+            if (self.get_transfer(&t.id)) |e| return create_transfer_exists(t, e);
 
             const dr_mut = self.forest.grooves.accounts_mutable.get(dr_immut.timestamp).?;
             const cr_mut = self.forest.grooves.accounts_mutable.get(cr_immut.timestamp).?;
@@ -980,8 +980,8 @@ pub fn StateMachineType(
                 return self.post_or_void_pending_transfer_rollback(t);
             }
 
-            const dr_immut = self.forest.grooves.accounts_immutable.get(t.debit_account_id).?;
-            const cr_immut = self.forest.grooves.accounts_immutable.get(t.credit_account_id).?;
+            const dr_immut = self.forest.grooves.accounts_immutable.get(&t.debit_account_id).?;
+            const cr_immut = self.forest.grooves.accounts_immutable.get(&t.credit_account_id).?;
             assert(dr_immut.id == t.debit_account_id);
             assert(cr_immut.id == t.credit_account_id);
 
@@ -1042,12 +1042,12 @@ pub fn StateMachineType(
             if (t.pending_id == t.id) return .pending_id_must_be_different;
             if (t.timeout != 0) return .timeout_reserved_for_pending_transfer;
 
-            const p = self.get_transfer(t.pending_id) orelse return .pending_transfer_not_found;
+            const p = self.get_transfer(&t.pending_id) orelse return .pending_transfer_not_found;
             assert(p.id == t.pending_id);
             if (!p.flags.pending) return .pending_transfer_not_pending;
 
-            const dr_immut = self.forest.grooves.accounts_immutable.get(p.debit_account_id).?;
-            const cr_immut = self.forest.grooves.accounts_immutable.get(p.credit_account_id).?;
+            const dr_immut = self.forest.grooves.accounts_immutable.get(&p.debit_account_id).?;
+            const cr_immut = self.forest.grooves.accounts_immutable.get(&p.credit_account_id).?;
             assert(dr_immut.id == p.debit_account_id);
             assert(cr_immut.id == p.credit_account_id);
             assert(p.timestamp > dr_immut.timestamp);
@@ -1071,9 +1071,9 @@ pub fn StateMachineType(
                 return .pending_transfer_has_different_amount;
             }
 
-            if (self.get_transfer(t.id)) |e| return post_or_void_pending_transfer_exists(t, e, p);
+            if (self.get_transfer(&t.id)) |e| return post_or_void_pending_transfer_exists(t, e, p);
 
-            if (self.get_posted(t.pending_id)) |posted| {
+            if (self.get_posted(&t.pending_id)) |posted| {
                 if (posted) return .pending_transfer_already_posted;
                 return .pending_transfer_already_voided;
             }
@@ -1127,13 +1127,13 @@ pub fn StateMachineType(
             assert(t.flags.post_pending_transfer or t.flags.void_pending_transfer);
 
             assert(t.pending_id > 0);
-            const p = self.get_transfer(t.pending_id).?;
+            const p = self.get_transfer(&t.pending_id).?;
             assert(p.id == t.pending_id);
             assert(p.debit_account_id > 0);
             assert(p.credit_account_id > 0);
 
-            const dr_immut = self.forest.grooves.accounts_immutable.get(p.debit_account_id).?;
-            const cr_immut = self.forest.grooves.accounts_immutable.get(p.credit_account_id).?;
+            const dr_immut = self.forest.grooves.accounts_immutable.get(&p.debit_account_id).?;
+            const cr_immut = self.forest.grooves.accounts_immutable.get(&p.credit_account_id).?;
             assert(dr_immut.id == p.debit_account_id);
             assert(cr_immut.id == p.credit_account_id);
 
@@ -1212,12 +1212,12 @@ pub fn StateMachineType(
             return .exists;
         }
 
-        fn get_transfer(self: *const StateMachine, id: u128) ?*const Transfer {
+        fn get_transfer(self: *const StateMachine, id: *const u128) ?*const Transfer {
             return self.forest.grooves.transfers.get(id);
         }
 
         /// Returns whether a pending transfer, if it exists, has already been posted or voided.
-        fn get_posted(self: *const StateMachine, pending_id: u128) ?bool {
+        fn get_posted(self: *const StateMachine, pending_id: *const u128) ?bool {
             return self.forest.grooves.posted.get(pending_id);
         }
 

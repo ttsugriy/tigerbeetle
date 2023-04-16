@@ -38,8 +38,12 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 assert(@bitSizeOf(Value) == 32 * 8);
             }
 
-            inline fn compare_keys(a: u128, b: u128) math.Order {
-                return math.order(a, b);
+            inline fn compare_keys(a: *const u128, b: *const u128) math.Order {
+                return @call(
+                    .{ .modifier = .always_inline },
+                    math.order,
+                    .{ a.*, b.* },
+                );
             }
 
             inline fn key_from_value(value: *const Value) KeyHelper(u128, Value).KeyFromValue {
@@ -54,9 +58,9 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 return value.data == .tombstone;
             }
 
-            inline fn tombstone_from_key(id: u128) Value {
+            inline fn tombstone_from_key(id: *const u128) Value {
                 return .{
-                    .id = id,
+                    .id = id.*,
                     .data = .tombstone,
                 };
             }
@@ -149,8 +153,9 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
             groove.* = undefined;
         }
 
-        pub fn get(groove: *const PostedGroove, id: u128) ?bool {
-            return groove.prefetch_objects.get(id);
+        pub inline fn get(groove: *const PostedGroove, id: *const u128) ?bool {
+            // TODO: vendor hashtable to accept pointers.
+            return groove.prefetch_objects.get(id.*);
         }
 
         /// Must be called directly before the state machine begins queuing ids for prefetch.
@@ -178,16 +183,16 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
         /// This must be called by the state machine for every key to be prefetched.
         /// We tolerate duplicate IDs enqueued by the state machine.
         /// For example, if all unique operations require the same two dependencies.
-        pub fn prefetch_enqueue(groove: *PostedGroove, id: u128) void {
+        pub fn prefetch_enqueue(groove: *PostedGroove, id: *const u128) void {
             if (groove.tree.lookup_from_memory(groove.prefetch_snapshot.?, id)) |value| {
-                assert(value.id == id);
+                assert(value.id == id.*);
                 switch (value.data) {
                     .posted => groove.prefetch_objects.putAssumeCapacity(value.id, true),
                     .voided => groove.prefetch_objects.putAssumeCapacity(value.id, false),
                     .tombstone => {}, // Leave the ID out of prefetch_objects.
                 }
             } else {
-                groove.prefetch_ids.putAssumeCapacity(id, {});
+                groove.prefetch_ids.putAssumeCapacity(id.*, {});
             }
         }
 
@@ -275,7 +280,7 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                     // This was checked in prefetch_enqueue().
                     assert(worker.context.groove.tree.lookup_from_memory(
                         worker.context.snapshot,
-                        id.*,
+                        id,
                     ) == null);
                 }
 
@@ -287,7 +292,7 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                     lookup_id_callback,
                     &worker.lookup_id,
                     worker.context.snapshot,
-                    id.*,
+                    id,
                 );
             }
 

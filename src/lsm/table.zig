@@ -30,7 +30,7 @@ pub const TableUsage = enum {
 };
 
 /// Provides types and functions to abstract the way we pass keys by ref or by value.
-/// Numeric keys, such as u64 and u128 are more efficient passed by value, while structs
+/// Numeric keys, such as u64 and u128 are more efficient passed by value, whereas structs
 /// like `CompositeKey` are always passed by reference.
 pub fn KeyHelper(
     comptime TableKey: type,
@@ -38,8 +38,7 @@ pub fn KeyHelper(
 ) type {
     comptime assert(TableKey != void and @sizeOf(TableKey) > 0);
 
-    const key_pass_by_ref = !trait.isNumber(TableKey) and
-        @sizeOf(TableKey) > @sizeOf(usize);
+    const key_pass_by_ref = @sizeOf(TableKey) > @sizeOf(usize);
 
     return struct {
         pub const KeyRef = if (key_pass_by_ref) *const TableKey else TableKey;
@@ -68,16 +67,10 @@ pub fn KeyHelper(
             }
         else
             struct {
-                const key_extract_by_ref = @typeInfo(TableValue) == .Struct and
-                    @hasField(TableValue, "key") and
-                    std.meta.fieldInfo(TableValue, .key).field_type == TableKey;
-
-                key: if (key_extract_by_ref) *const TableKey else TableKey,
+                key: TableKey,
 
                 pub inline fn ref(self: *const @This()) KeyRef {
-                    if (comptime key_extract_by_ref and !key_pass_by_ref) {
-                        return self.key.*;
-                    } else if (comptime key_pass_by_ref and !key_extract_by_ref) {
+                    if (key_pass_by_ref) {
                         return &self.key;
                     } else {
                         return self.key;
@@ -85,7 +78,7 @@ pub fn KeyHelper(
                 }
 
                 pub inline fn deref(self: *const @This()) TableKey {
-                    return if (key_extract_by_ref) self.key.* else self.key;
+                    return self.key;
                 }
             };
 
