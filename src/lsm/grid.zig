@@ -12,8 +12,6 @@ const IOPS = @import("../iops.zig").IOPS;
 const SetAssociativeCache = @import("set_associative_cache.zig").SetAssociativeCache;
 const stdx = @import("../stdx.zig");
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 const log = std.log.scoped(.grid);
 const tracer = @import("../tracer.zig");
 
@@ -111,10 +109,8 @@ pub fn GridType(comptime Storage: type) type {
         };
 
         const cache_interface = struct {
-            inline fn address_from_address(address: *const u64) KeyExtractorType(u64, u64) {
-                return .{
-                    .key = address.*,
-                };
+            inline fn address_from_address(address: *const u64) u64 {
+                return address.*;
             }
 
             inline fn hash_address(address: *const u64) u64 {

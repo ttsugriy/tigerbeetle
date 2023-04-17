@@ -656,14 +656,14 @@ pub fn TreeType(comptime TreeTable: type, comptime Storage: type, comptime tree_
             const level_b: u8 = 0;
             const range = tree.manifest.compaction_range(
                 level_b,
-                tree.table_immutable.key_min().ptr(),
-                tree.table_immutable.key_max().ptr(),
+                &tree.table_immutable.key_min(),
+                &tree.table_immutable.key_max(),
             );
 
             assert(range.table_count >= 1);
             assert(range.table_count <= compaction_tables_input_max);
-            assert(compare_keys(&range.key_min, tree.table_immutable.key_min().ptr()) != .gt);
-            assert(compare_keys(&range.key_max, tree.table_immutable.key_max().ptr()) != .lt);
+            assert(compare_keys(&range.key_min, &tree.table_immutable.key_min()) != .gt);
+            assert(compare_keys(&range.key_max, &tree.table_immutable.key_max()) != .lt);
 
             log.debug(tree_name ++
                 ": compacting immutable table to level 0 " ++

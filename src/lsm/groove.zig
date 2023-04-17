@@ -12,8 +12,6 @@ const GridType = @import("grid.zig").GridType;
 const CompositeKey = @import("composite_key.zig").CompositeKey;
 const NodePool = @import("node_pool.zig").NodePool(constants.lsm_manifest_node_size, 16);
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 const snapshot_latest = @import("tree.zig").snapshot_latest;
 const compaction_snapshot_for_op = @import("tree.zig").compaction_snapshot_for_op;
 
@@ -26,10 +24,8 @@ fn ObjectTreeHelpers(comptime Object: type) type {
             return std.math.order(timestamp_a.*, timestamp_b.*);
         }
 
-        inline fn key_from_value(value: *const Object) KeyExtractorType(u64, Object) {
-            return .{
-                .key = value.timestamp & ~@as(u64, tombstone_bit),
-            };
+        inline fn key_from_value(value: *const Object) u64 {
+            return value.timestamp & ~@as(u64, tombstone_bit);
         }
 
         const sentinel_key = std.math.maxInt(u64);
@@ -62,10 +58,8 @@ const IdTreeValue = extern struct {
         return std.math.order(a.*, b.*);
     }
 
-    inline fn key_from_value(value: *const IdTreeValue) KeyExtractorType(u128, IdTreeValue) {
-        return .{
-            .key = value.id,
-        };
+    inline fn key_from_value(value: *const IdTreeValue) u128 {
+        return value.id;
     }
 
     const sentinel_key = std.math.maxInt(u128);
@@ -548,8 +542,9 @@ pub fn GrooveType(
             groove.* = undefined;
         }
 
-        pub fn get(groove: *const Groove, key: PrimaryKey) ?*const Object {
-            return groove.prefetch_objects.getKeyPtrAdapted(key, PrefetchObjectsAdapter{});
+        pub inline fn get(groove: *const Groove, key: *const PrimaryKey) ?*const Object {
+            // TODO: vendor hashtable to accept pointers.
+            return groove.prefetch_objects.getKeyPtrAdapted(key.*, PrefetchObjectsAdapter{});
         }
 
         /// Must be called directly before the state machine begins queuing ids for prefetch.
@@ -859,8 +854,8 @@ pub fn GrooveType(
         }
 
         /// Asserts that the object with the given PrimaryKey exists.
-        pub fn remove(groove: *Groove, key: PrimaryKey) void {
-            const object = groove.prefetch_objects.getKeyPtrAdapted(key, PrefetchObjectsAdapter{}).?;
+        pub fn remove(groove: *Groove, key: *const PrimaryKey) void {
+            const object = groove.prefetch_objects.getKeyPtrAdapted(key.*, PrefetchObjectsAdapter{}).?;
 
             groove.objects.remove(object);
             if (has_id) {

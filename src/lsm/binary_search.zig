@@ -2,8 +2,6 @@ const std = @import("std");
 const assert = std.debug.assert;
 const math = std.math;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 pub const Config = struct {
     verify: bool = false,
 };
@@ -24,7 +22,7 @@ pub const Config = struct {
 pub fn binary_search_values_raw(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
+    comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
     comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     values: []const Value,
     key: *const Key,
@@ -56,7 +54,7 @@ pub fn binary_search_values_raw(
         // This trick seems to be what's needed to get llvm to emit branchless code for this,
         // a ternary-style if expression was generated as a jump here for whatever reason.
         const next_offsets = [_]usize{ offset, mid };
-        offset = next_offsets[@boolToInt(compare_keys(key_from_value(&values[mid]).ptr(), key) == .lt)];
+        offset = next_offsets[@boolToInt(compare_keys(&key_from_value(&values[mid]), key) == .lt)];
 
         length -= half;
     }
@@ -64,18 +62,18 @@ pub fn binary_search_values_raw(
     if (config.verify) {
         assert(length == 1);
         assert(offset == 0 or
-            compare_keys(key_from_value(&values[offset - 1]).ptr(), key) != .gt);
+            compare_keys(&key_from_value(&values[offset - 1]), key) != .gt);
         assert(offset + length == values.len or
-            compare_keys(key_from_value(&values[offset + length]).ptr(), key) != .lt);
+            compare_keys(&key_from_value(&values[offset + length]), key) != .lt);
     }
 
-    offset += @boolToInt(compare_keys(key_from_value(&values[offset]).ptr(), key) == .lt);
+    offset += @boolToInt(compare_keys(&key_from_value(&values[offset]), key) == .lt);
 
     if (config.verify) {
         assert(offset == 0 or
-            compare_keys(key_from_value(&values[offset - 1]).ptr(), key) == .lt);
+            compare_keys(&key_from_value(&values[offset - 1]), key) == .lt);
         assert(offset == values.len or
-            compare_keys(key_from_value(&values[offset]).ptr(), key) != .lt);
+            compare_keys(&key_from_value(&values[offset]), key) != .lt);
     }
 
     return @intCast(u32, offset);
@@ -92,10 +90,8 @@ pub inline fn binary_search_keys_raw(
         Key,
         Key,
         struct {
-            inline fn key_from_key(k: *const Key) KeyExtractorType(Key, Key) {
-                return .{
-                    .key = k.*,
-                };
+            inline fn key_from_key(k: *const Key) Key {
+                return k.*;
             }
         }.key_from_key,
         compare_keys,
@@ -113,7 +109,7 @@ const BinarySearchResult = struct {
 pub inline fn binary_search_values(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
+    comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
     comptime compare_keys: fn (*const Key, *const Key) callconv(.Inline) math.Order,
     values: []const Value,
     key: *const Key,
@@ -122,7 +118,7 @@ pub inline fn binary_search_values(
     const index = binary_search_values_raw(Key, Value, key_from_value, compare_keys, values, key, config);
     return .{
         .index = index,
-        .exact = index < values.len and compare_keys(key_from_value(&values[index]).ptr(), key) == .eq,
+        .exact = index < values.len and compare_keys(&key_from_value(&values[index]), key) == .eq,
     };
 }
 

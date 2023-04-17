@@ -3,8 +3,6 @@ const mem = std.mem;
 const math = std.math;
 const assert = std.debug.assert;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 const constants = @import("../constants.zig");
 const div_ceil = @import("../stdx.zig").div_ceil;
 const binary_search = @import("binary_search.zig");
@@ -40,13 +38,13 @@ pub fn TableImmutableType(comptime Table: type) type {
             return table.values.ptr[0..value_count_max];
         }
 
-        pub inline fn key_min(table: *const TableImmutable) KeyExtractorType(Key, Value) {
+        pub inline fn key_min(table: *const TableImmutable) Key {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[0]);
         }
 
-        pub inline fn key_max(table: *const TableImmutable) KeyExtractorType(Key, Value) {
+        pub inline fn key_max(table: *const TableImmutable) Key {
             assert(!table.free);
             assert(table.values.len > 0);
             return key_from_value(&table.values[table.values.len - 1]);
@@ -91,9 +89,9 @@ pub fn TableImmutableType(comptime Table: type) type {
                 var i: usize = 1;
                 while (i < sorted_values.len) : (i += 1) {
                     assert(i > 0);
-                    const left_key = key_from_value(&sorted_values[i - 1]);
-                    const right_key = key_from_value(&sorted_values[i]);
-                    assert(compare_keys(left_key.ptr(), right_key.ptr()) == .lt);
+                    const left_key = &key_from_value(&sorted_values[i - 1]);
+                    const right_key = &key_from_value(&sorted_values[i]);
+                    assert(compare_keys(left_key, right_key) == .lt);
                 }
             }
 
@@ -119,7 +117,7 @@ pub fn TableImmutableType(comptime Table: type) type {
             );
             if (result.exact) {
                 const value = &table.values[result.index];
-                if (constants.verify) assert(compare_keys(key, key_from_value(value).ptr()) == .eq);
+                if (constants.verify) assert(compare_keys(key, &key_from_value(value)) == .eq);
                 return value;
             }
 

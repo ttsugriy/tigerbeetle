@@ -11,8 +11,6 @@ const constants = @import("../constants.zig");
 const div_ceil = @import("../stdx.zig").div_ceil;
 const verify = constants.verify;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 const tracer = @import("../tracer.zig");
 
 pub const Layout = struct {
@@ -28,7 +26,7 @@ pub const Layout = struct {
 pub fn SetAssociativeCache(
     comptime Key: type,
     comptime Value: type,
-    comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
+    comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
     comptime hash: fn (*const Key) callconv(.Inline) u64,
     comptime equal: fn (*const Key, *const Key) callconv(.Inline) bool,
     comptime layout: Layout,
@@ -241,7 +239,7 @@ pub fn SetAssociativeCache(
             var it = BitIterator(Ways){ .bits = ways };
             while (it.next()) |way| {
                 const count = self.counts.get(set.offset + way);
-                if (count > 0 and equal(key_from_value(&set.values[way]).ptr(), key)) {
+                if (count > 0 and equal(&key_from_value(&set.values[way]), key)) {
                     return way;
                 }
             }
@@ -268,9 +266,9 @@ pub fn SetAssociativeCache(
         /// Insert a value, evicting an older entry if needed.
         /// Return the index at which the value was inserted.
         pub fn insert_index(self: *Self, value: *const Value) usize {
-            const key = key_from_value(value);
-            const set = self.associate(key.ptr());
-            if (self.search(&set, key.ptr())) |way| {
+            const key = &key_from_value(value);
+            const set = self.associate(key);
+            if (self.search(&set, key)) |way| {
                 // Overwrite the old entry for this key.
                 self.counts.set(set.offset + way, 1);
                 set.values[way] = value.*;

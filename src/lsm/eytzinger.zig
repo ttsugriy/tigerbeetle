@@ -3,8 +3,6 @@ const assert = std.debug.assert;
 const math = std.math;
 const mem = std.mem;
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 /// keys_count must be one less than a power of two. This allows us to align the layout
 /// such that great great grandchildren of a node are not unnecessarily split across cache lines.
 pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
@@ -102,7 +100,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
         pub fn layout_from_keys_or_values(
             comptime Key: type,
             comptime Value: type,
-            comptime key_from_value: fn (*const Value) callconv(.Inline) KeyExtractorType(Key, Value),
+            comptime key_from_value: fn (*const Value) callconv(.Inline) Key,
             /// This sentinel must compare greater than all actual keys.
             comptime sentinel_key: Key,
             values: []const Value,
@@ -123,7 +121,7 @@ pub fn eytzinger(comptime keys_count: u32, comptime values_max: u32) type {
 
             for (tree) |values_index, i| {
                 if (values_index < values.len) {
-                    layout[i + 1] = key_from_value(&values[values_index]).value();
+                    layout[i + 1] = key_from_value(&values[values_index]);
                 } else {
                     layout[i + 1] = sentinel_key;
                 }

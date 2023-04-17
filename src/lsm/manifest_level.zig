@@ -8,8 +8,6 @@ const constants = @import("../constants.zig");
 const lsm = @import("tree.zig");
 const binary_search = @import("binary_search.zig");
 
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
-
 const Direction = @import("direction.zig").Direction;
 const SegmentedArray = @import("segmented_array.zig").SegmentedArray;
 const SortedSegmentedArray = @import("segmented_array.zig").SortedSegmentedArray;
@@ -30,10 +28,8 @@ pub fn ManifestLevelType(
             table_count_max,
             Key,
             struct {
-                inline fn key_from_value(value: *const Key) KeyExtractorType(Key, Key) {
-                    return .{
-                        .key = value.*,
-                    };
+                inline fn key_from_value(value: *const Key) Key {
+                    return value.*;
                 }
             }.key_from_value,
             compare_keys,

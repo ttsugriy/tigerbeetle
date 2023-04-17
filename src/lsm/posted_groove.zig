@@ -7,7 +7,6 @@ const mem = std.mem;
 const constants = @import("../constants.zig");
 
 const TableType = @import("table.zig").TableType;
-const KeyExtractorType = @import("table.zig").KeyExtractorType;
 const TreeType = @import("tree.zig").TreeType;
 const GridType = @import("grid.zig").GridType;
 const NodePool = @import("node_pool.zig").NodePool(constants.lsm_manifest_node_size, 16);
@@ -42,10 +41,8 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
                 return math.order(a.*, b.*);
             }
 
-            inline fn key_from_value(value: *const Value) KeyExtractorType(u128, Value) {
-                return .{
-                    .key = value.id,
-                };
+            inline fn key_from_value(value: *const Value) u128 {
+                return value.id;
             }
 
             const sentinel_key = math.maxInt(u128);
@@ -149,8 +146,9 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
             groove.* = undefined;
         }
 
-        pub fn get(groove: *const PostedGroove, id: u128) ?bool {
-            return groove.prefetch_objects.get(id);
+        pub inline fn get(groove: *const PostedGroove, id: *const u128) ?bool {
+            // TODO: vendor hashtable to accept pointers.
+            return groove.prefetch_objects.get(id.*);
         }
 
         /// Must be called directly before the state machine begins queuing ids for prefetch.
@@ -324,9 +322,10 @@ pub fn PostedGrooveType(comptime Storage: type, value_count_max: usize) type {
             gop.value_ptr.* = posted;
         }
 
-        pub fn remove(groove: *PostedGroove, id: u128) void {
-            assert(groove.prefetch_objects.remove(id));
-            groove.tree.remove(&Value{ .id = id, .data = .tombstone });
+        pub fn remove(groove: *PostedGroove, id: *const u128) void {
+            // TODO: vendor hashtable to accept pointers.
+            assert(groove.prefetch_objects.remove(id.*));
+            groove.tree.remove(&Value{ .id = id.*, .data = .tombstone });
         }
 
         fn tree_callback(tree: *Tree) void {
