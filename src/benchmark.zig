@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const assert = std.debug.assert;
 const panic = std.debug.panic;
 const log = std.log;
-pub const log_level: std.log.Level = .debug;
+pub const log_level: std.log.Level = .info;
 
 const constants = @import("constants.zig");
 const stdx = @import("stdx.zig");
@@ -275,7 +275,7 @@ const Benchmark = struct {
     fn create_transfers_finish(b: *Benchmark) void {
         // Record latencies.
         const batch_end_ns = b.timer.read();
-        log.debug("batch {}: {} tx in {} ms\n", .{
+        log.info("batch {}: {} tx in {} ms\n", .{
             b.batch_index,
             b.batch_transfers.items.len,
             @divTrunc(batch_end_ns - b.batch_start_ns, std.time.ns_per_ms),
