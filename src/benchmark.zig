@@ -258,7 +258,7 @@ const Benchmark = struct {
             b.batch_transfers.items.len,
             ms_time,
         });
-        const statsd_packet = try std.fmt.allocPrint(b.allocator, "benchmark.txns:{}|g\nbenchmark.timings:{}|ms", .{ b.batch_transfers.items.len, ms_time });
+        const statsd_packet = std.fmt.allocPrint(b.allocator, "benchmark.txns:{}|g\nbenchmark.timings:{}|ms", .{ b.batch_transfers.items.len, ms_time }) catch @panic("print failure");
         log.info(statsd_packet, .{});
         b.batch_latency_ns.appendAssumeCapacity(batch_end_ns - b.batch_start_ns);
         for (b.transfer_start_ns.items) |start_ns| {
