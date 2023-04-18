@@ -93,7 +93,46 @@ pub fn main() !void {
         },
     );
 
-    var benchmark = Benchmark{ .io = &io, .message_pool = &message_pool, .client = &client, .batch_accounts = try std.ArrayList(tb.Account).initCapacity(allocator, account_count_per_batch), .account_count = account_count, .account_index = 0, .rng = std.rand.DefaultPrng.init(42), .timer = try std.time.Timer.start(), .batch_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count), .transfer_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count), .batch_transfers = try std.ArrayList(tb.Transfer).initCapacity(allocator, transfer_count_per_batch), .batch_start_ns = 0, .tranfer_index = 0, .transfer_count = transfer_count, .transfer_count_per_second = transfer_count_per_second, .transfer_arrival_rate_ns = transfer_arrival_rate_ns, .transfer_start_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count_per_batch), .batch_index = 0, .transfer_index = 0, .transfer_next_arrival_ns = 0, .message = null, .callback = null, .done = false, .allocator = allocator };
+    const statsd_address = try std.net.Address.parseIp4("127.0.0.1", 8125);
+
+    const statsd_socket = try io.open_socket(
+        addresses2[0].any.family,
+        std.os.SOCK.DGRAM,
+        std.os.IPPROTO.UDP,
+    );
+    defer std.os.closeSocket(statsd_socket);
+
+    const statsd_packet = std.fmt.allocPrint(allocator, "benchmark.txns:{}|g\nbenchmark.timings:{}|ms", .{ 1234, 123 }) catch @panic("print failure");
+    _ = std.os.sendto(statsd_socket, statsd_packet, 0, &statsd_address.any, statsd_address.getOsSockLen()) catch @panic("socket failure");
+
+    var benchmark = Benchmark{
+        .io = &io,
+        .message_pool = &message_pool,
+        .client = &client,
+        .batch_accounts = try std.ArrayList(tb.Account).initCapacity(allocator, account_count_per_batch),
+        .account_count = account_count,
+        .account_index = 0,
+        .rng = std.rand.DefaultPrng.init(42),
+        .timer = try std.time.Timer.start(),
+        .batch_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count),
+        .transfer_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count),
+        .batch_transfers = try std.ArrayList(tb.Transfer).initCapacity(allocator, transfer_count_per_batch),
+        .batch_start_ns = 0,
+        .tranfer_index = 0,
+        .transfer_count = transfer_count,
+        .transfer_count_per_second = transfer_count_per_second,
+        .transfer_arrival_rate_ns = transfer_arrival_rate_ns,
+        .transfer_start_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count_per_batch),
+        .batch_index = 0,
+        .transfer_index = 0,
+        .transfer_next_arrival_ns = 0,
+        .message = null,
+        .callback = null,
+        .done = false,
+        .allocator = allocator,
+        .statsd_address = statsd_address,
+        .statsd_socket = statsd_socket,
+    };
 
     benchmark.create_accounts();
 
@@ -148,6 +187,8 @@ const Benchmark = struct {
     callback: ?fn (*Benchmark) void,
     done: bool,
     allocator: std.mem.Allocator,
+    statsd_address: std.net.Address,
+    statsd_socket: std.os.socket_t,
 
     fn create_accounts(b: *Benchmark) void {
         if (b.account_index >= b.account_count) {
@@ -259,7 +300,8 @@ const Benchmark = struct {
             ms_time,
         });
         const statsd_packet = std.fmt.allocPrint(b.allocator, "benchmark.txns:{}|g\nbenchmark.timings:{}|ms", .{ b.batch_transfers.items.len, ms_time }) catch @panic("print failure");
-        log.info("packet: {s}", .{statsd_packet});
+        _ = std.os.sendto(b.statsd_socket, statsd_packet, 0, &b.statsd_address.any, b.statsd_address.getOsSockLen()) catch @panic("socket failure");
+
         b.batch_latency_ns.appendAssumeCapacity(batch_end_ns - b.batch_start_ns);
         for (b.transfer_start_ns.items) |start_ns| {
             b.transfer_latency_ns.appendAssumeCapacity(batch_end_ns - start_ns);
