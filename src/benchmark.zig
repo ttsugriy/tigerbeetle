@@ -93,31 +93,7 @@ pub fn main() !void {
         },
     );
 
-    var benchmark = Benchmark{
-        .io = &io,
-        .message_pool = &message_pool,
-        .client = &client,
-        .batch_accounts = try std.ArrayList(tb.Account).initCapacity(allocator, account_count_per_batch),
-        .account_count = account_count,
-        .account_index = 0,
-        .rng = std.rand.DefaultPrng.init(42),
-        .timer = try std.time.Timer.start(),
-        .batch_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count),
-        .transfer_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count),
-        .batch_transfers = try std.ArrayList(tb.Transfer).initCapacity(allocator, transfer_count_per_batch),
-        .batch_start_ns = 0,
-        .tranfer_index = 0,
-        .transfer_count = transfer_count,
-        .transfer_count_per_second = transfer_count_per_second,
-        .transfer_arrival_rate_ns = transfer_arrival_rate_ns,
-        .transfer_start_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count_per_batch),
-        .batch_index = 0,
-        .transfer_index = 0,
-        .transfer_next_arrival_ns = 0,
-        .message = null,
-        .callback = null,
-        .done = false,
-    };
+    var benchmark = Benchmark{ .io = &io, .message_pool = &message_pool, .client = &client, .batch_accounts = try std.ArrayList(tb.Account).initCapacity(allocator, account_count_per_batch), .account_count = account_count, .account_index = 0, .rng = std.rand.DefaultPrng.init(42), .timer = try std.time.Timer.start(), .batch_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count), .transfer_latency_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count), .batch_transfers = try std.ArrayList(tb.Transfer).initCapacity(allocator, transfer_count_per_batch), .batch_start_ns = 0, .tranfer_index = 0, .transfer_count = transfer_count, .transfer_count_per_second = transfer_count_per_second, .transfer_arrival_rate_ns = transfer_arrival_rate_ns, .transfer_start_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count_per_batch), .batch_index = 0, .transfer_index = 0, .transfer_next_arrival_ns = 0, .message = null, .callback = null, .done = false, .allocator = allocator };
 
     benchmark.create_accounts();
 
@@ -171,6 +147,7 @@ const Benchmark = struct {
     message: ?*MessagePool.Message,
     callback: ?fn (*Benchmark) void,
     done: bool,
+    allocator: std.heap.Allocator,
 
     fn create_accounts(b: *Benchmark) void {
         if (b.account_index >= b.account_count) {
@@ -275,11 +252,14 @@ const Benchmark = struct {
     fn create_transfers_finish(b: *Benchmark) void {
         // Record latencies.
         const batch_end_ns = b.timer.read();
+        const ms_time = @divTrunc(batch_end_ns - b.batch_start_ns, std.time.ns_per_ms);
         log.info("batch {}: {} tx in {} ms\n", .{
             b.batch_index,
             b.batch_transfers.items.len,
-            @divTrunc(batch_end_ns - b.batch_start_ns, std.time.ns_per_ms),
+            ms_time,
         });
+        const statsd_packet = try std.fmt.allocPrint(b.allocator, "benchmark.txns:{}|g\nbenchmark.timings:{}|ms", .{ b.batch_transfers.items.len, ms_time });
+        log.info(statsd_packet, .{});
         b.batch_latency_ns.appendAssumeCapacity(batch_end_ns - b.batch_start_ns);
         for (b.transfer_start_ns.items) |start_ns| {
             b.transfer_latency_ns.appendAssumeCapacity(batch_end_ns - start_ns);
