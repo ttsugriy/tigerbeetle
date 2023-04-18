@@ -147,7 +147,7 @@ const Benchmark = struct {
     message: ?*MessagePool.Message,
     callback: ?fn (*Benchmark) void,
     done: bool,
-    allocator: std.heap.Allocator,
+    allocator: std.mem.Allocator,
 
     fn create_accounts(b: *Benchmark) void {
         if (b.account_index >= b.account_count) {
