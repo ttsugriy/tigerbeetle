@@ -48,14 +48,25 @@ pub fn main() !void {
     // Discard executable name.
     _ = try args.next(allocator).?;
 
+    var addresses: ?[]std.net.Address = undefined;
+
     // Parse arguments.
     while (args.next(allocator)) |arg_or_err| {
         const arg = try arg_or_err;
-        _ = (try parse_arg(allocator, &args, arg, "--account-count", &account_count)) or
-            (try parse_arg(allocator, &args, arg, "--transfer-count", &transfer_count)) or
-            (try parse_arg(allocator, &args, arg, "--transfer-count-per-second", &transfer_count_per_second)) or
-            panic("Unrecognized argument: \"{}\"", .{std.zig.fmtEscapes(arg)});
+        try stderr.print("{s} {}", .{ arg, std.mem.eql(u8, arg, "--addresses") });
+
+        if (std.mem.eql(u8, arg, "--addresses")) {
+            var addr_string = try args.next(allocator) orelse @panic("fail");
+            try stderr.print("{s}", .{addr_string});
+            addresses = try vsr.parse_addresses(allocator, addr_string, constants.nodes_max);
+        } else {
+            _ = (try parse_arg(allocator, &args, arg, "--account-count", &account_count)) or
+                (try parse_arg(allocator, &args, arg, "--transfer-count", &transfer_count)) or
+                (try parse_arg(allocator, &args, arg, "--transfer-count-per-second", &transfer_count_per_second)) or
+                panic("Unrecognized argument: \"{}\"", .{std.zig.fmtEscapes(arg)});
+        }
     }
+    var addresses2 = addresses orelse @panic("fail");
 
     if (account_count < 2) panic("Need at least two acconts, got {}", .{account_count});
 
@@ -72,6 +83,7 @@ pub fn main() !void {
 
     var message_pool = try MessagePool.init(allocator, .client);
 
+    try stderr.print("{s}", .{addresses2});
     var client = try Client.init(
         allocator,
         client_id,
@@ -79,7 +91,7 @@ pub fn main() !void {
         @intCast(u8, address.len),
         &message_pool,
         .{
-            .configuration = address[0..],
+            .configuration = addresses2[0..],
             .io = &io,
         },
     );
