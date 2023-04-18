@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const assert = std.debug.assert;
 const panic = std.debug.panic;
 const log = std.log;
-pub const log_level: std.log.Level = .err;
+pub const log_level: std.log.Level = .debug;
 
 const constants = @import("constants.zig");
 const stdx = @import("stdx.zig");
@@ -53,11 +53,9 @@ pub fn main() !void {
     // Parse arguments.
     while (args.next(allocator)) |arg_or_err| {
         const arg = try arg_or_err;
-        try stderr.print("{s} {}", .{ arg, std.mem.eql(u8, arg, "--addresses") });
 
         if (std.mem.eql(u8, arg, "--addresses")) {
             var addr_string = try args.next(allocator) orelse @panic("fail");
-            try stderr.print("{s}", .{addr_string});
             addresses = try vsr.parse_addresses(allocator, addr_string, constants.nodes_max);
         } else {
             _ = (try parse_arg(allocator, &args, arg, "--account-count", &account_count)) or
@@ -77,18 +75,17 @@ pub fn main() !void {
 
     const client_id = std.crypto.random.int(u128);
     const cluster_id: u32 = 0;
-    var address = [_]std.net.Address{try std.net.Address.parseIp4("127.0.0.1", constants.port)};
 
     var io = try IO.init(32, 0);
 
     var message_pool = try MessagePool.init(allocator, .client);
 
-    try stderr.print("{s}", .{addresses2});
+    try stderr.print("Connecting to: {s}\n", .{addresses2});
     var client = try Client.init(
         allocator,
         client_id,
         cluster_id,
-        @intCast(u8, address.len),
+        @intCast(u8, addresses2.len),
         &message_pool,
         .{
             .configuration = addresses2[0..],
