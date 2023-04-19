@@ -124,6 +124,7 @@ pub fn main() !void {
         .transfer_arrival_rate_ns = transfer_arrival_rate_ns,
         .transfer_start_ns = try std.ArrayList(u64).initCapacity(allocator, transfer_count_per_batch),
         .batch_index = 0,
+        .transfers_sent = 0,
         .transfer_index = 0,
         .transfer_next_arrival_ns = 0,
         .message = null,
@@ -299,7 +300,7 @@ const Benchmark = struct {
             b.batch_transfers.items.len,
             ms_time,
         });
-        const statsd_packet = std.fmt.allocPrint(b.allocator, "benchmark.txns:{}|g\nbenchmark.timings:{}|ms", .{ b.batch_transfers.items.len, ms_time }) catch @panic("print failure");
+        const statsd_packet = std.fmt.allocPrint(b.allocator, "benchmark.txns:{}|g\nbenchmark.timings:{}|ms\nbenchmark.batch:{}|g\nbenchmark.completed:{}|g", .{ b.batch_transfers.items.len, ms_time, b.batch_index, b.transfers_sent }) catch @panic("print failure");
         _ = std.os.sendto(b.statsd_socket, statsd_packet, 0, &b.statsd_address.any, b.statsd_address.getOsSockLen()) catch @panic("socket failure");
 
         b.batch_latency_ns.appendAssumeCapacity(batch_end_ns - b.batch_start_ns);
@@ -308,6 +309,7 @@ const Benchmark = struct {
         }
 
         b.batch_index += 1;
+        b.transfers_sent += b.batch_transfers.items.len;
         b.create_transfers();
     }
 
