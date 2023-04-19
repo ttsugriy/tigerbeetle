@@ -182,6 +182,7 @@ const Benchmark = struct {
     transfer_arrival_rate_ns: usize,
     transfer_start_ns: std.ArrayList(u64),
     batch_index: usize,
+    transfers_sent: usize,
     transfer_index: usize,
     transfer_next_arrival_ns: usize,
     message: ?*MessagePool.Message,
