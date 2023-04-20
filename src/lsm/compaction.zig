@@ -43,6 +43,7 @@ const constants = @import("../constants.zig");
 
 const stdx = @import("../stdx.zig");
 const GridType = @import("grid.zig").GridType;
+const BlockType = @import("grid.zig").BlockType;
 const alloc_block = @import("grid.zig").alloc_block;
 const TableInfoType = @import("manifest.zig").TableInfoType;
 const ManifestType = @import("manifest.zig").ManifestType;
@@ -706,6 +707,7 @@ pub fn CompactionType(
                         write,
                         block,
                         Table.block_address(block.*),
+                        @intToEnum(BlockType, @enumToInt(write_block_field)),
                     );
                 }
 

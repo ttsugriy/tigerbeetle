@@ -425,12 +425,7 @@ pub fn ManifestLogType(comptime Storage: type, comptime TableInfo: type) type {
                 entry_count,
             });
 
-            manifest_log.grid.write_block(
-                write_block_callback,
-                &manifest_log.write,
-                block,
-                address,
-            );
+            manifest_log.grid.write_block(write_block_callback, &manifest_log.write, block, address, .index);
             manifest_log.blocks.advance_head();
         }
 
