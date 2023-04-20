@@ -223,6 +223,8 @@ pub const configs = struct {
     else
         default_development;
 
+    // TODO: double check running in production config
+    // Also look at cleaning up naming
     pub const current = current: {
         var base = switch (build_options.config_base) {
             .default => default,

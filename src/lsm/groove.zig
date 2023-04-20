@@ -810,6 +810,7 @@ pub fn GrooveType(
             groove.objects.put(object);
             if (has_id) groove.ids.put(&IdTreeValue{ .id = object.id, .timestamp = object.timestamp });
 
+            // TODO - hack to disable secondary indexes and see what happens
             inline for (std.meta.fields(IndexTrees)) |field| {
                 const Helper = IndexTreeFieldHelperType(field.name);
 

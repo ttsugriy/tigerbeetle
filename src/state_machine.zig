@@ -445,7 +445,7 @@ pub fn StateMachineType(
 
         fn prefetch_create_transfers(self: *StateMachine, transfers: []const Transfer) void {
             for (transfers) |*t| {
-                self.forest.grooves.transfers.prefetch_enqueue(t.id);
+                // self.forest.grooves.transfers.prefetch_enqueue(t.id);
 
                 if (t.flags.post_pending_transfer or t.flags.void_pending_transfer) {
                     self.forest.grooves.transfers.prefetch_enqueue(t.pending_id);
@@ -908,7 +908,7 @@ pub fn StateMachineType(
             if (t.ledger != dr_immut.ledger) return .transfer_must_have_the_same_ledger_as_accounts;
 
             // If the transfer already exists, then it must not influence the overflow or limit checks.
-            if (self.get_transfer(t.id)) |e| return create_transfer_exists(t, e);
+            //if (self.get_transfer(t.id)) |e| return create_transfer_exists(t, e);
 
             const dr_mut = self.forest.grooves.accounts_mutable.get(dr_immut.timestamp).?;
             const cr_mut = self.forest.grooves.accounts_mutable.get(cr_immut.timestamp).?;

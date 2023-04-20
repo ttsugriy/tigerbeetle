@@ -203,7 +203,9 @@ const Command = struct {
         }
 
         while (true) {
+            // TODO: measure loop time
             replica.tick();
+            // TODO: Also within IO
             try command.io.run_for_ns(constants.tick_ms * std.time.ns_per_ms);
         }
     }

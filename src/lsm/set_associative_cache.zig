@@ -1,3 +1,4 @@
+// TODO: Instrument miss / hit rate of cache - and sizes
 const std = @import("std");
 const builtin = @import("builtin");
 

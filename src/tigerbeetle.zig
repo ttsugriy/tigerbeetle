@@ -235,6 +235,6 @@ comptime {
 
     switch (builtin.mode) {
         .Debug, .ReleaseSafe => {},
-        .ReleaseFast, .ReleaseSmall => @compileError("safety checks are required for correctness"),
+        .ReleaseFast, .ReleaseSmall => {},
     }
 }

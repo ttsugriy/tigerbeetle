@@ -44,7 +44,7 @@ do
     echo "Formatting replica $I..."
 
     # Be careful to use a benchmark-specific filename so that we don't erase a real data file:
-    FILE="./0_${I}.tigerbeetle.benchmark"
+    FILE="0_${I}.tigerbeetle.benchmark"
     if [ -f "$FILE" ]; then
         rm "$FILE"
     fi
@@ -66,7 +66,7 @@ echo ""
 
 for I in $REPLICAS
 do
-    FILE="./0_${I}.tigerbeetle.benchmark"
+    FILE="0_${I}.tigerbeetle.benchmark"
     if [ -f "$FILE" ]; then
         rm "$FILE"
     fi

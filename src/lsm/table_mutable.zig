@@ -164,6 +164,7 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
         }
 
         /// The returned slice is invalidated whenever this is called for any tree.
+        // TODO: Instrument
         pub fn sort_into_values_and_clear(
             table: *TableMutable,
             values_max: []Value,
