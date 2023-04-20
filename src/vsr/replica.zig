@@ -2691,6 +2691,7 @@ pub fn ReplicaType(
                     .primary = self.primary_index(self.view),
                 }) catch @panic("aof failure");
             }
+            log.info("grid cache filter hits: {} - grid cache filter misses: {} - filter cache size {}", .{self.grid.filter_cache_hits, self.grid.filter_cache_misses, self.grid.filter_cache.count()});
 
             const reply_body_size = @intCast(u32, self.state_machine.commit(
                 prepare.header.client,

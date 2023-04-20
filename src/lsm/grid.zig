@@ -162,10 +162,16 @@ pub fn GridType(comptime Storage: type) type {
         // True if there's a read thats resolving callbacks. If so, the read cache must not be invalidated.
         read_resolving: bool = false,
 
+        filter_cache: std.AutoHashMap(u64, *BlockPtr) = undefined,
+
+        filter_cache_hits: usize = 0,
+        filter_cache_misses: usize = 0,
+        allocator: mem.Allocator = undefined,
+
         pub fn init(allocator: mem.Allocator, superblock: *SuperBlock) !Grid {
             // TODO Determine this at runtime based on runtime configured maximum
             // memory usage of tigerbeetle.
-            const cache_blocks_count = 8192;
+            const cache_blocks_count = 2048;
 
             const cache_blocks = try allocator.alloc(BlockPtr, cache_blocks_count);
             errdefer allocator.free(cache_blocks);
@@ -190,6 +196,8 @@ pub fn GridType(comptime Storage: type) type {
                 .cache_blocks = cache_blocks,
                 .cache = cache,
                 .read_iop_blocks = read_iop_blocks,
+                .filter_cache = std.AutoHashMap(u64, *BlockPtr).init(allocator),
+                .allocator = allocator
             };
         }
 
@@ -365,9 +373,16 @@ pub fn GridType(comptime Storage: type) type {
             assert(!grid.read_resolving);
 
             // Insert the write block into the cache, and give the evicted block to the writer.
-            if (completed_write.block_type != .data) {
+            var cache_block: *BlockPtr = undefined;
+            if (completed_write.block_type == .filter) {
+                cache_block = grid.allocator.create(BlockPtr) catch @panic("foo");
+                cache_block.* = alloc_block(grid.allocator) catch @panic("foo");
+                grid.filter_cache.put(completed_write.address, cache_block) catch @panic("foo");
+                std.mem.swap(BlockPtr, cache_block, completed_write.block);
+                std.mem.set(u8, completed_write.block.*, 0);
+            } else {
                 const cache_index = grid.cache.insert_index(&completed_write.address);
-                const cache_block = &grid.cache_blocks[cache_index];
+                cache_block = &grid.cache_blocks[cache_index];
                 std.mem.swap(BlockPtr, cache_block, completed_write.block);
                 std.mem.set(u8, completed_write.block.*, 0);
             }
@@ -447,11 +462,21 @@ pub fn GridType(comptime Storage: type) type {
             const grid = read.grid;
 
             // Try to resolve the read from the cache.
-            if (grid.cache.get_index(read.address)) |cache_index| {
-                const cache_block = grid.cache_blocks[cache_index];
-                if (constants.verify) grid.verify_cached_read(read.address, cache_block);
-                grid.read_block_resolve(read, cache_block);
-                return;
+            if (read.block_type == .filter) {
+                if (grid.filter_cache.get(read.address)) |cache_block| {
+                    grid.filter_cache_hits += 1;
+                    grid.read_block_resolve(read, cache_block.*);
+                    return;
+                } else {
+                    grid.filter_cache_misses += 1;
+                }
+            } else {
+                if (grid.cache.get_index(read.address)) |cache_index| {
+                    const cache_block = grid.cache_blocks[cache_index];
+                    if (constants.verify) grid.verify_cached_read(read.address, cache_block);
+                    grid.read_block_resolve(read, cache_block);
+                    return;
+                }
             }
 
             // Grab an IOP to resolve the block from storage.
@@ -500,10 +525,19 @@ pub fn GridType(comptime Storage: type) type {
             const iop_block = &grid.read_iop_blocks[grid.read_iops.index(iop)];
 
             // Insert the block into the cache, and give the evicted block to `iop`.
-            const cache_index = grid.cache.insert_index(&read.address);
-            const cache_block = &grid.cache_blocks[cache_index];
-            std.mem.swap(BlockPtr, iop_block, cache_block);
-            std.mem.set(u8, iop_block.*, 0);
+            var cache_block: *BlockPtr = undefined;
+            if (read.block_type == .filter) {
+                cache_block = grid.allocator.create(BlockPtr) catch @panic("foo");
+                cache_block.* = alloc_block(grid.allocator) catch @panic("foo");
+                grid.filter_cache.put(read.address, cache_block) catch @panic("foo");
+                std.mem.swap(BlockPtr, iop_block, cache_block);
+                std.mem.set(u8, iop_block.*, 0);
+            } else {
+                const cache_index = grid.cache.insert_index(&read.address);
+                cache_block = &grid.cache_blocks[cache_index];
+                std.mem.swap(BlockPtr, iop_block, cache_block);
+                std.mem.set(u8, iop_block.*, 0);
+            }
 
             const read_iop_index = grid.read_iops.index(iop);
             tracer.end(

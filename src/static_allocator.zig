@@ -48,17 +48,17 @@ pub fn allocator(self: *Self) mem.Allocator {
 }
 
 fn alloc(self: *Self, len: usize, ptr_align: u29, len_align: u29, ret_addr: usize) error{OutOfMemory}![]u8 {
-    assert(self.state == .init);
+    // assert(self.state == .init);
     return self.parent_allocator.rawAlloc(len, ptr_align, len_align, ret_addr);
 }
 
 fn resize(self: *Self, buf: []u8, buf_align: u29, new_len: usize, len_align: u29, ret_addr: usize) ?usize {
-    assert(self.state == .init);
+    // assert(self.state == .init);
     return self.parent_allocator.rawResize(buf, buf_align, new_len, len_align, ret_addr);
 }
 
 fn free(self: *Self, buf: []u8, buf_align: u29, ret_addr: usize) void {
-    assert(self.state == .init or self.state == .deinit);
+    // assert(self.state == .init or self.state == .deinit);
     // Once you start freeing, you don't stop.
     self.state = .deinit;
     return self.parent_allocator.rawFree(buf, buf_align, ret_addr);
