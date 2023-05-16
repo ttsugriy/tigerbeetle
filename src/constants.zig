@@ -263,6 +263,9 @@ pub const grid_repair_reads_max = config.process.grid_repair_reads_max;
 /// The number of grid writes allocated to handle incoming command=block messages.
 pub const grid_repair_writes_max = config.process.grid_repair_writes_max;
 
+/// The default sizing of the grid cache. It's expected for operators to override this on the CLI.
+pub const grid_cache_blocks_default = config.process.grid_cache_blocks_default;
+
 comptime {
     assert(grid_repair_request_max > 0);
     assert(grid_repair_request_max <= @divFloor(message_body_size_max, @sizeOf(vsr.BlockRequest)));

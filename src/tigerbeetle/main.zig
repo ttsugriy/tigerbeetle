@@ -148,6 +148,14 @@ const Command = struct {
             aof = try AOF.from_absolute_path(aof_path);
         }
 
+        const grid_cache_size = args.grid_cache_blocks_count * constants.block_size;
+        const grid_cache_size_min = 1 * 1024 * 1024 * 1024;
+        if (grid_cache_size <= grid_cache_size_min) {
+            log_main.warn("Grid cache size of {}MB is small. See --grid-cache-size", .{
+                @divExact(grid_cache_size, 1024 * 1024),
+            });
+        }
+
         var replica: Replica = undefined;
         replica.open(allocator, .{
             .node_count = @intCast(u8, args.addresses.len),
@@ -167,6 +175,7 @@ const Command = struct {
                 .configuration = args.addresses,
                 .io = &command.io,
             },
+            .grid_cache_blocks_count = args.grid_cache_blocks_count,
         }) catch |err| switch (err) {
             error.NoAddress => fatal("all --addresses must be provided", .{}),
             else => |e| return e,
@@ -184,10 +193,11 @@ const Command = struct {
                 node_maybe = node.next;
             }
         }
-        log_main.info("{}: Allocated {} bytes in {} regions during replica init", .{
+        log_main.info("{}: Allocated {}MB in {} regions during replica init (Grid Cache: {}MB)", .{
             replica.replica,
-            allocation_size,
+            @divFloor(allocation_size, 1024 * 1024),
             allocation_count,
+            @divFloor(grid_cache_size, 1024 * 1024),
         });
 
         log_main.info("{}: cluster={}: listening on {}", .{

@@ -31,6 +31,7 @@ pub fn SetAssociativeCache(
     comptime equal: fn (Key, Key) callconv(.Inline) bool,
     comptime layout: Layout,
     comptime name: [:0]const u8,
+    comptime value_count_max_requirement: enum { relaxed, power_of_2 },
 ) type {
     assert(math.isPowerOfTwo(@sizeOf(Key)));
     assert(math.isPowerOfTwo(@sizeOf(Value)));
@@ -128,13 +129,20 @@ pub fn SetAssociativeCache(
         clocks: PackedUnsignedIntegerArray(Clock),
 
         pub fn init(allocator: mem.Allocator, value_count_max: u64) !Self {
-            assert(math.isPowerOfTwo(value_count_max));
+            const sets = @divExact(value_count_max, layout.ways);
+
+            switch (value_count_max_requirement) {
+                .power_of_2 => {
+                    assert(math.isPowerOfTwo(value_count_max));
+                    assert(math.isPowerOfTwo(sets));
+                },
+
+                .relaxed => {},
+            }
+
             assert(value_count_max > 0);
             assert(value_count_max >= layout.ways);
             assert(value_count_max % layout.ways == 0);
-
-            const sets = @divExact(value_count_max, layout.ways);
-            assert(math.isPowerOfTwo(sets));
 
             const values_size_max = value_count_max * @sizeOf(Value);
             assert(values_size_max >= layout.cache_line_size);
@@ -398,6 +406,7 @@ fn set_associative_cache_test(
         context.equal,
         layout,
         "test",
+        .power_of_2,
     );
 
     return struct {
@@ -784,6 +793,7 @@ fn search_tags_test(comptime Key: type, comptime Value: type, comptime layout: L
         context.equal,
         layout,
         "test",
+        .power_of_2,
     );
 
     const reference = struct {

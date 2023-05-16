@@ -376,6 +376,7 @@ pub fn ClusterType(comptime StateMachineType: fn (comptime Storage: type, compti
                     .time = time,
                     .state_machine_options = cluster.options.state_machine,
                     .message_bus_options = .{ .network = cluster.network },
+                    .grid_cache_blocks_count = 2048,
                 },
             );
             assert(replica.cluster == cluster.options.cluster_id);

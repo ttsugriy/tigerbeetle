@@ -21,7 +21,7 @@ const usage = fmt.comptimePrint(
     \\
     \\  tigerbeetle format --cluster=<integer> --replica=<index> --replica-count=<integer> <path>
     \\
-    \\  tigerbeetle start --addresses=<addresses> <path>
+    \\  tigerbeetle start --addresses=<addresses> [--grid-cache-size=<size>] <path>
     \\
     \\  tigerbeetle version [--version]
     \\
@@ -59,6 +59,12 @@ const usage = fmt.comptimePrint(
     \\        will be used.
     \\        "addresses[i]" corresponds to replica "i".
     \\
+    \\  --grid-cache-size=<size>
+    \\        Set the grid cache size, size prefixes (MB, GB) are supported. The grid cache acts
+    \\        like a page cache for TigerBeetle, and should be set as large as possible.
+    \\        On a machine running only TigerBeetle, this is somewhere around
+    \\        (Total RAM) - 3GB (TigerBeetle) - 1GB (System), eg 12GB for a 16GB machine.
+    \\
     \\  --verbose
     \\        Print compile-time configuration along with the build version.
     \\
@@ -89,6 +95,7 @@ pub const Command = union(enum) {
         cache_transfers: u32,
         cache_transfers_posted: u32,
         storage_size_limit: u64,
+        grid_cache_blocks_count: u64,
         path: [:0]const u8,
     };
 
@@ -128,6 +135,7 @@ pub fn parse_args(allocator: std.mem.Allocator) !Command {
     var cache_transfers: ?[]const u8 = null;
     var cache_transfers_posted: ?[]const u8 = null;
     var storage_size_limit: ?[]const u8 = null;
+    var grid_cache_size: ?[]const u8 = null;
     var verbose: ?bool = null;
 
     var args = try std.process.argsWithAllocator(allocator);
@@ -180,6 +188,9 @@ pub fn parse_args(allocator: std.mem.Allocator) !Command {
         } else if (mem.startsWith(u8, arg, "--limit-storage")) {
             if (command != .start) fatal("--limit-storage: supported only by 'start' command", .{});
             storage_size_limit = parse_flag("--limit-storage", arg);
+        } else if (mem.startsWith(u8, arg, "--grid-cache-size")) {
+            if (command != .start) fatal("--grid-cache-size: supported only by 'start' command", .{});
+            grid_cache_size = parse_flag("--grid-cache-size", arg);
         } else if (mem.eql(u8, arg, "--verbose")) {
             if (command != .version) fatal("--verbose: supported only by 'version' command", .{});
             verbose = true;
@@ -243,6 +254,7 @@ pub fn parse_args(allocator: std.mem.Allocator) !Command {
                         constants.cache_transfers_posted_max,
                     ),
                     .storage_size_limit = parse_storage_size(storage_size_limit),
+                    .grid_cache_blocks_count = parse_grid_cache_size(grid_cache_size),
                     .path = path orelse fatal("required: <path>", .{}),
                 },
             };
@@ -310,6 +322,32 @@ fn parse_storage_size(size_string: ?[]const u8) u64 {
         });
     }
     return size;
+}
+
+fn parse_grid_cache_size(size_string: ?[]const u8) u64 {
+    const target_size = if (size_string) |s| parse_size(s) else return constants.grid_cache_blocks_default;
+
+    // Calculate a grid cache size, using the target_size provided as an upper
+    // bound. We need to be a multiple of our Set Associative Cache's ways and still
+    // meet other assertions, but we relax the power of 2 requirement for the grid
+    // cache specifically.
+    // 2048 is the lowest multiple that can satisfy all those requirements for the
+    // current grid configuration.
+    const sac_multiple = 2048;
+    const block_count = @divFloor(
+        @divFloor(target_size, constants.block_size),
+        sac_multiple,
+    ) * sac_multiple;
+
+    const size = block_count * constants.block_size;
+
+    const size_min = sac_multiple * constants.block_size;
+    if (size < size_min) fatal("grid cache size {} is below minimum: {}MB", .{
+        size,
+        @divExact(size_min, 1024 * 1024),
+    });
+
+    return block_count;
 }
 
 fn parse_size(string: []const u8) u64 {

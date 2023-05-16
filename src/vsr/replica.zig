@@ -390,6 +390,7 @@ pub fn ReplicaType(
             aof: *AOF,
             state_machine_options: StateMachine.Options,
             message_bus_options: MessageBus.Options,
+            grid_cache_blocks_count: u64,
         };
 
         /// Initializes and opens the provided replica using the options.
@@ -444,6 +445,7 @@ pub fn ReplicaType(
                 .message_pool = options.message_pool,
                 .state_machine_options = options.state_machine_options,
                 .message_bus_options = options.message_bus_options,
+                .grid_cache_blocks_count = options.grid_cache_blocks_count,
             });
 
             // Disable all dynamic allocation from this point onwards.
@@ -646,6 +648,7 @@ pub fn ReplicaType(
             message_pool: *MessagePool,
             message_bus_options: MessageBus.Options,
             state_machine_options: StateMachine.Options,
+            grid_cache_blocks_count: u64,
         };
 
         /// NOTE: self.superblock must be initialized and opened prior to this call.
@@ -730,6 +733,7 @@ pub fn ReplicaType(
             self.grid = try Grid.init(allocator, .{
                 .superblock = &self.superblock,
                 .on_read_fault = on_grid_read_fault,
+                .cache_blocks_count = options.grid_cache_blocks_count,
             });
             errdefer self.grid.deinit(allocator);
 

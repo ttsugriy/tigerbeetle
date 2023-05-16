@@ -74,6 +74,7 @@ const ConfigProcess = struct {
     grid_repair_request_max: usize = 4,
     grid_repair_reads_max: usize = 4,
     grid_repair_writes_max: usize = 1,
+    grid_cache_blocks_default: u64 = 16384,
     aof_record: bool = false,
     aof_recovery: bool = false,
 };
