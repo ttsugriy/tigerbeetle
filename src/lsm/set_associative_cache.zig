@@ -31,7 +31,6 @@ pub fn SetAssociativeCache(
     comptime equal: fn (Key, Key) callconv(.Inline) bool,
     comptime layout: Layout,
     comptime name: [:0]const u8,
-    comptime value_count_max_requirement: enum { relaxed, power_of_2 },
 ) type {
     assert(math.isPowerOfTwo(@sizeOf(Key)));
     assert(math.isPowerOfTwo(@sizeOf(Value)));
@@ -91,6 +90,11 @@ pub fn SetAssociativeCache(
         const Count = meta.Int(.unsigned, layout.clock_bits);
         const Clock = meta.Int(.unsigned, clock_hand_bits);
 
+        /// We don't require `value_count_max` in `init` to be a power of 2, but we do require
+        /// it to be a multiple of `value_count_max_multiple`. The calculation below
+        /// follows from a multiple which will satisfy all asserts.
+        pub const value_count_max_multiple = layout.cache_line_size * layout.ways * layout.clock_bits;
+
         sets: u64,
 
         hits: u64 = 0,
@@ -131,15 +135,6 @@ pub fn SetAssociativeCache(
         pub fn init(allocator: mem.Allocator, value_count_max: u64) !Self {
             const sets = @divExact(value_count_max, layout.ways);
 
-            switch (value_count_max_requirement) {
-                .power_of_2 => {
-                    assert(math.isPowerOfTwo(value_count_max));
-                    assert(math.isPowerOfTwo(sets));
-                },
-
-                .relaxed => {},
-            }
-
             assert(value_count_max > 0);
             assert(value_count_max >= layout.ways);
             assert(value_count_max % layout.ways == 0);
@@ -155,6 +150,8 @@ pub fn SetAssociativeCache(
             const clocks_size = @divExact(sets * clock_hand_bits, 8);
             assert(clocks_size >= layout.cache_line_size);
             assert(clocks_size % layout.cache_line_size == 0);
+
+            assert(value_count_max % value_count_max_multiple == 0);
 
             const tags = try allocator.alloc(Tag, value_count_max);
             errdefer allocator.free(tags);
@@ -406,7 +403,6 @@ fn set_associative_cache_test(
         context.equal,
         layout,
         "test",
-        .power_of_2,
     );
 
     return struct {
@@ -793,7 +789,6 @@ fn search_tags_test(comptime Key: type, comptime Value: type, comptime layout: L
         context.equal,
         layout,
         "test",
-        .power_of_2,
     );
 
     const reference = struct {

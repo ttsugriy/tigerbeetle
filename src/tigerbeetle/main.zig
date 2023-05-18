@@ -151,7 +151,7 @@ const Command = struct {
         const grid_cache_size = args.grid_cache_blocks_count * constants.block_size;
         const grid_cache_size_min = 1 * 1024 * 1024 * 1024;
         if (grid_cache_size <= grid_cache_size_min) {
-            log_main.warn("Grid cache size of {}MB is small. See --grid-cache-size", .{
+            log_main.warn("Grid cache size of {}MB is small. See --cache-grid", .{
                 @divExact(grid_cache_size, 1024 * 1024),
             });
         }

@@ -40,7 +40,6 @@ pub fn TableMutableType(comptime Table: type, comptime tree_name: [:0]const u8) 
             }.equal,
             .{},
             tree_name,
-            .power_of_2,
         );
 
         values: Values = .{},

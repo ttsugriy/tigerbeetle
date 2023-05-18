@@ -137,7 +137,7 @@ pub fn GridType(comptime Storage: type) type {
 
         const set_associative_cache_ways = 16;
 
-        const Cache = SetAssociativeCache(
+        pub const Cache = SetAssociativeCache(
             u64,
             u64,
             cache_interface.address_from_address,
@@ -148,7 +148,6 @@ pub fn GridType(comptime Storage: type) type {
                 .value_alignment = @alignOf(u64),
             },
             "grid",
-            .relaxed,
         );
 
         superblock: *SuperBlock,
