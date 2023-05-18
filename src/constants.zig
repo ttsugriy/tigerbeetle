@@ -264,7 +264,7 @@ pub const grid_repair_reads_max = config.process.grid_repair_reads_max;
 pub const grid_repair_writes_max = config.process.grid_repair_writes_max;
 
 /// The default sizing of the grid cache. It's expected for operators to override this on the CLI.
-pub const grid_cache_blocks_default = config.process.grid_cache_blocks_default;
+pub const grid_cache_size_default = config.process.grid_cache_size_default;
 
 comptime {
     assert(grid_repair_request_max > 0);

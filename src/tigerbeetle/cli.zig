@@ -327,7 +327,7 @@ fn parse_storage_size(size_string: ?[]const u8) u64 {
 }
 
 fn parse_cache_grid(size_string: ?[]const u8) u64 {
-    const target_size = if (size_string) |s| parse_size(s) else return constants.grid_cache_blocks_default;
+    const target_size = if (size_string) |s| parse_size(s) else constants.grid_cache_size_default;
 
     // Calculate a grid cache size, using the target_size provided as an upper bound, since we need
     // to be a multiple of our Set Associative Cache's value_count_max_multiple
