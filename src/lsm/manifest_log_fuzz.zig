@@ -84,13 +84,11 @@ fn run_fuzz(
 
     var grid = try Grid.init(allocator, .{
         .superblock = &superblock,
-        .cache_blocks_count = 2048,
     });
     defer grid.deinit(allocator);
 
     var grid_verify = try Grid.init(allocator, .{
         .superblock = &superblock_verify,
-        .cache_blocks_count = 2048,
     });
     defer grid_verify.deinit(allocator);
 
@@ -474,7 +472,6 @@ const Environment = struct {
             test_grid.deinit(env.allocator);
             test_grid.* = try Grid.init(env.allocator, .{
                 .superblock = test_superblock,
-                .cache_blocks_count = 2048,
             });
 
             test_manifest_log.deinit(env.allocator);

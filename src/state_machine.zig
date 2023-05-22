@@ -1399,7 +1399,6 @@ const TestContext = struct {
 
         ctx.grid = try Grid.init(allocator, .{
             .superblock = &ctx.superblock,
-            .cache_blocks_count = 2048,
         });
         errdefer ctx.grid.deinit(allocator);
 

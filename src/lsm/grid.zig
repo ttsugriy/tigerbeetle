@@ -176,7 +176,7 @@ pub fn GridType(comptime Storage: type) type {
 
         pub fn init(allocator: mem.Allocator, options: struct {
             superblock: *SuperBlock,
-            cache_blocks_count: u64,
+            cache_blocks_count: u64 = Cache.value_count_max_multiple,
             on_read_fault: ?fn (*Grid, *Grid.Read) void = null,
         }) !Grid {
             const cache_blocks = try allocator.alloc(BlockPtr, options.cache_blocks_count);

@@ -85,7 +85,6 @@ const Environment = struct {
 
         env.grid = try Grid.init(allocator, .{
             .superblock = &env.superblock,
-            .cache_blocks_count = 2048,
         });
         errdefer env.grid.deinit(allocator);
 

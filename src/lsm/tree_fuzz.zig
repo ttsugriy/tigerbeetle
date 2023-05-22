@@ -161,7 +161,6 @@ fn EnvironmentType(comptime table_usage: TableUsage) type {
             env.grid = try Grid.init(allocator, .{
                 .superblock = &env.superblock,
                 .on_read_fault = on_grid_read_fault,
-                .cache_blocks_count = 2048,
             });
             defer env.grid.deinit(allocator);
 
