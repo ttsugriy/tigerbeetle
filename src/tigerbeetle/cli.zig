@@ -97,7 +97,7 @@ pub const Command = union(enum) {
         cache_transfers: u32,
         cache_transfers_posted: u32,
         storage_size_limit: u64,
-        grid_cache_blocks_count: u64,
+        cache_grid_blocks: u64,
         path: [:0]const u8,
     };
 
@@ -256,7 +256,7 @@ pub fn parse_args(allocator: std.mem.Allocator) !Command {
                         constants.cache_transfers_posted_max,
                     ),
                     .storage_size_limit = parse_storage_size(storage_size_limit),
-                    .grid_cache_blocks_count = parse_cache_grid(cache_grid),
+                    .cache_grid_blocks = parse_cache_grid(cache_grid),
                     .path = path orelse fatal("required: <path>", .{}),
                 },
             };
