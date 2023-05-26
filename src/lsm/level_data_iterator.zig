@@ -90,6 +90,19 @@ pub fn LevelDataIteratorType(comptime Table: type, comptime Storage: type) type 
             it.* = undefined;
         }
 
+        pub fn reset(it: *LevelDataIterator) void {
+            std.mem.set(u8, it.index_block, undefined);
+            it.level_index_iterator.reset();
+            it.table_data_iterator.reset();
+            it.* = .{
+                .context = undefined,
+                .level_index_iterator = it.level_index_iterator,
+                .table_data_iterator = it.table_data_iterator,
+                .index_block = it.index_block,
+                .callback = .none,
+            };
+        }
+
         pub fn start(
             it: *LevelDataIterator,
             context: Context,
