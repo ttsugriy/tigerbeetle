@@ -13,6 +13,10 @@ const tigerbeetle = vsr.tigerbeetle;
 const IO = vsr.io.IO;
 const data_file_size_min = vsr.superblock.data_file_size_min;
 const Grid = vsr.lsm.grid.GridType(vsr.storage.Storage);
+const StateMachine = vsr.state_machine.StateMachineType(
+    vsr.storage.Storage,
+    constants.state_machine_config,
+);
 
 // TODO Document --cache-accounts, --cache-transfers, --cache-transfers-posted, --limit-storage
 const usage = fmt.comptimePrint(
@@ -97,7 +101,7 @@ pub const Command = union(enum) {
         cache_transfers: u32,
         cache_transfers_posted: u32,
         storage_size_limit: u64,
-        cache_grid_blocks: u64,
+        cache_grid_blocks: u32,
         path: [:0]const u8,
     };
 
@@ -233,6 +237,11 @@ pub fn parse_args(allocator: std.mem.Allocator) !Command {
             };
         },
         .start => {
+            const groove_config = StateMachine.Forest.groove_config;
+            const AccountsValuesCache = groove_config.accounts_mutable.ObjectTree.TableMutable.ValuesCache;
+            const TransfersValuesCache = groove_config.transfers.ObjectTree.TableMutable.ValuesCache;
+            const PostedValuesCache = groove_config.posted.Tree.TableMutable.ValuesCache;
+
             return Command{
                 .start = .{
                     .args_allocated = args_allocated,
@@ -240,23 +249,31 @@ pub fn parse_args(allocator: std.mem.Allocator) !Command {
                         allocator,
                         addresses orelse fatal("required: --addresses", .{}),
                     ),
-                    .cache_accounts = parse_size_to_count(
+                    .cache_accounts = parse_cache_size_to_count(
                         tigerbeetle.Account,
+                        AccountsValuesCache,
                         cache_accounts,
-                        constants.cache_accounts_max,
+                        constants.cache_accounts_size_default,
                     ),
-                    .cache_transfers = parse_size_to_count(
+                    .cache_transfers = parse_cache_size_to_count(
                         tigerbeetle.Transfer,
+                        TransfersValuesCache,
                         cache_transfers,
-                        constants.cache_transfers_max,
+                        constants.cache_transfers_size_default,
                     ),
-                    .cache_transfers_posted = parse_size_to_count(
+                    .cache_transfers_posted = parse_cache_size_to_count(
                         u256, // TODO(#264): Use actual type here, once exposed.
+                        PostedValuesCache,
                         cache_transfers_posted,
-                        constants.cache_transfers_posted_max,
+                        constants.cache_transfers_posted_size_default,
                     ),
                     .storage_size_limit = parse_storage_size(storage_size_limit),
-                    .cache_grid_blocks = parse_cache_grid(cache_grid),
+                    .cache_grid_blocks = parse_cache_size_to_count(
+                        [constants.block_size]u8,
+                        Grid.Cache,
+                        cache_grid,
+                        constants.grid_cache_size_default,
+                    ),
                     .path = path orelse fatal("required: <path>", .{}),
                 },
             };
@@ -326,26 +343,24 @@ fn parse_storage_size(size_string: ?[]const u8) u64 {
     return size;
 }
 
-fn parse_cache_grid(size_string: ?[]const u8) u64 {
-    const target_size = if (size_string) |s| parse_size(s) else constants.grid_cache_size_default;
+/// Given a limit like `10GiB`, a SetAssociativeCache and T return the largest `value_count_max`
+/// that can fit in the limit.
+fn parse_cache_size_to_count(
+    comptime T: type,
+    comptime SetAssociativeCache: type,
+    size_string: ?[]const u8,
+    default_size: u64,
+) u32 {
+    const target_size = if (size_string) |s| parse_size(s) else default_size;
+    const value_count_max_multiple = SetAssociativeCache.value_count_max_multiple;
 
-    // Calculate a grid cache size, using the target_size provided as an upper bound, since we need
-    // to be a multiple of our Set Associative Cache's value_count_max_multiple
-    const value_count_max_multiple = Grid.Cache.value_count_max_multiple;
-    const block_count_limit = @divFloor(target_size, constants.block_size);
-    const block_count_rounded = @divFloor(
-        block_count_limit,
+    const count_limit = @divFloor(target_size, @sizeOf(T));
+    const count_rounded = @divFloor(
+        count_limit,
         value_count_max_multiple,
     ) * value_count_max_multiple;
 
-    const size = block_count_rounded * constants.block_size;
-    const size_min = value_count_max_multiple * constants.block_size;
-    if (size < size_min) fatal("grid cache size {} is below minimum: {}MB", .{
-        size,
-        @divExact(size_min, 1024 * 1024),
-    });
-
-    return block_count_rounded;
+    return @intCast(u32, count_rounded);
 }
 
 fn parse_size(string: []const u8) u64 {
@@ -415,30 +430,6 @@ test "parse_size" {
     try expectEqual(@as(u64, 10 * kib), parse_size("  10  kib "));
     try expectEqual(@as(u64, 100 * kib), parse_size("  100  KB "));
     try expectEqual(@as(u64, 1000 * kib), parse_size("  1000  kb "));
-}
-
-/// Given a limit like `10GiB`, return the maximum power-of-two count of `T`s
-/// that can fit in the limit.
-fn parse_size_to_count(comptime T: type, string_opt: ?[]const u8, comptime default: u32) u32 {
-    var result: u32 = default;
-    if (string_opt) |string| {
-        const byte_size = parse_size(string);
-        const count_u64 = math.floorPowerOfTwo(u64, @divFloor(byte_size, @sizeOf(T)));
-        const count = math.cast(u32, count_u64) catch |err| switch (err) {
-            error.Overflow => fatal("size value is too large: '{s}'", .{string}),
-        };
-        if (count > 0 and count < 2048) fatal("size value is too small: '{s}'", .{string});
-        assert(count * @sizeOf(T) <= byte_size);
-
-        result = count;
-    }
-
-    // SetAssociativeCache requires a power-of-two cardinality and a minimal
-    // size.
-    assert(result == 0 or result >= 2048);
-    assert(result == 0 or math.isPowerOfTwo(result));
-
-    return result;
 }
 
 fn parse_replica(replica_count: u8, raw_replica: []const u8) u8 {

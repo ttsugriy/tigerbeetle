@@ -390,7 +390,7 @@ pub fn ReplicaType(
             aof: *AOF,
             state_machine_options: StateMachine.Options,
             message_bus_options: MessageBus.Options,
-            grid_cache_blocks_count: u64,
+            grid_cache_blocks_count: u32 = Grid.Cache.value_count_max_multiple,
         };
 
         /// Initializes and opens the provided replica using the options.
@@ -648,7 +648,7 @@ pub fn ReplicaType(
             message_pool: *MessagePool,
             message_bus_options: MessageBus.Options,
             state_machine_options: StateMachine.Options,
-            grid_cache_blocks_count: u64,
+            grid_cache_blocks_count: u32,
         };
 
         /// NOTE: self.superblock must be initialized and opened prior to this call.

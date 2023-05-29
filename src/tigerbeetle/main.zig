@@ -148,9 +148,9 @@ const Command = struct {
             aof = try AOF.from_absolute_path(aof_path);
         }
 
-        const grid_cache_size = args.grid_cache_blocks_count * constants.block_size;
-        const grid_cache_size_min = 1 * 1024 * 1024 * 1024;
-        if (grid_cache_size <= grid_cache_size_min) {
+        const grid_cache_size = args.cache_grid_blocks * constants.block_size;
+        const grid_cache_size_warn = 1024 * 1024 * 1024;
+        if (grid_cache_size <= grid_cache_size_warn) {
             log_main.warn("Grid cache size of {}MB is small. See --cache-grid", .{
                 @divExact(grid_cache_size, 1024 * 1024),
             });
@@ -175,7 +175,7 @@ const Command = struct {
                 .configuration = args.addresses,
                 .io = &command.io,
             },
-            .grid_cache_blocks_count = args.grid_cache_blocks_count,
+            .grid_cache_blocks_count = args.cache_grid_blocks,
         }) catch |err| switch (err) {
             error.NoAddress => fatal("all --addresses must be provided", .{}),
             else => |e| return e,
