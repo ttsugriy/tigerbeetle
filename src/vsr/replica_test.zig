@@ -15,10 +15,12 @@ const LinkFilter = @import("../testing/cluster/network.zig").LinkFilter;
 const Network = @import("../testing/cluster/network.zig").Network;
 
 const slot_count = constants.journal_slot_count;
-const checkpoint_1 = checkpoint_trigger_1 - constants.lsm_batch_multiple;
-const checkpoint_2 = checkpoint_trigger_2 - constants.lsm_batch_multiple;
-const checkpoint_trigger_1 = slot_count - 1;
-const checkpoint_trigger_2 = slot_count + checkpoint_trigger_1 - constants.lsm_batch_multiple;
+const checkpoint_1 = checkpoint_1_trigger - constants.lsm_batch_multiple;
+const checkpoint_2 = checkpoint_2_trigger - constants.lsm_batch_multiple;
+const checkpoint_3 = checkpoint_3_trigger - constants.lsm_batch_multiple;
+const checkpoint_1_trigger = slot_count - 1;
+const checkpoint_2_trigger = slot_count + checkpoint_1_trigger - constants.lsm_batch_multiple;
+const checkpoint_3_trigger = slot_count + checkpoint_2_trigger - constants.lsm_batch_multiple;
 const log_level = std.log.Level.err;
 
 // TODO Test client eviction once it no longer triggers a client panic.
@@ -96,7 +98,7 @@ test "Cluster: recovery: WAL prepare corruption (R=3, corrupt checkpoint…head)
 
     var c = t.clients(0, t.cluster.clients.len);
     // Trigger the first checkpoint.
-    try c.request(checkpoint_trigger_1, checkpoint_trigger_1);
+    try c.request(checkpoint_1_trigger, checkpoint_1_trigger);
     t.replica(.R0).stop();
 
     // Corrupt op_checkpoint (59) and all ops that follow.
@@ -169,9 +171,9 @@ test "Cluster: recovery: grid corruption (disjoint)" {
     // Checkpoint to ensure that the replicas will actually use the grid to recover.
     // All replicas must be at the same commit to ensure grid repair won't fail and
     // fall back to state sync.
-    try c.request(checkpoint_trigger_1, checkpoint_trigger_1);
+    try c.request(checkpoint_1_trigger, checkpoint_1_trigger);
     try expectEqual(t.replica(.R_).op_checkpoint(), checkpoint_1);
-    try expectEqual(t.replica(.R_).commit(), checkpoint_trigger_1);
+    try expectEqual(t.replica(.R_).commit(), checkpoint_1_trigger);
 
     t.replica(.R_).stop();
 
@@ -183,7 +185,7 @@ test "Cluster: recovery: grid corruption (disjoint)" {
         t.replica(.R1),
         t.replica(.R2),
     }) |replica, i| {
-        var address = 1 + i; // Addresses start at 1.
+        var address: u64 = 1 + i; // Addresses start at 1.
         while (address <= vsr.superblock.grid_blocks_max) : (address += 3) {
             // Leave every third address un-corrupt.
             // Each block exists intact on exactly one replica.
@@ -196,12 +198,12 @@ test "Cluster: recovery: grid corruption (disjoint)" {
     t.run();
 
     try expectEqual(t.replica(.R_).status(), .normal);
-    try expectEqual(t.replica(.R_).commit(), checkpoint_trigger_1);
+    try expectEqual(t.replica(.R_).commit(), checkpoint_1_trigger);
     try expectEqual(t.replica(.R_).op_checkpoint(), checkpoint_1);
 
-    try c.request(checkpoint_trigger_2, checkpoint_trigger_2);
+    try c.request(checkpoint_2_trigger, checkpoint_2_trigger);
     try expectEqual(t.replica(.R_).op_checkpoint(), checkpoint_2);
-    try expectEqual(t.replica(.R_).commit(), checkpoint_trigger_2);
+    try expectEqual(t.replica(.R_).commit(), checkpoint_2_trigger);
 }
 
 test "Cluster: network: partition 2-1 (isolate backup, symmetric)" {
@@ -378,13 +380,13 @@ test "Cluster: repair: view-change, new-primary lagging behind checkpoint, forfe
 
     b1.drop_all(.__, .bidirectional);
 
-    try c.request(checkpoint_trigger_1 - 1, checkpoint_trigger_1 - 1);
-    try expectEqual(a0.commit(), checkpoint_trigger_1 - 1);
+    try c.request(checkpoint_1_trigger - 1, checkpoint_1_trigger - 1);
+    try expectEqual(a0.commit(), checkpoint_1_trigger - 1);
     try expectEqual(b1.commit(), 20);
-    try expectEqual(b2.commit(), checkpoint_trigger_1 - 1);
+    try expectEqual(b2.commit(), checkpoint_1_trigger - 1);
 
     b2.drop(.__, .incoming, .commit);
-    try c.request(checkpoint_trigger_1 + 1, checkpoint_trigger_1 + 1);
+    try c.request(checkpoint_1_trigger + 1, checkpoint_1_trigger + 1);
     try expectEqual(a0.op_checkpoint(), checkpoint_1);
     try expectEqual(b1.op_checkpoint(), 0);
     try expectEqual(b2.op_checkpoint(), checkpoint_1);
@@ -406,7 +408,7 @@ test "Cluster: repair: view-change, new-primary lagging behind checkpoint, forfe
     // Thanks to the new primary, the lagging backup is able to catch up to the latest
     // checkpoint/commit.
     try expectEqual(b1.role(), .backup);
-    try expectEqual(b1.commit(), checkpoint_trigger_1);
+    try expectEqual(b1.commit(), checkpoint_1_trigger);
     try expectEqual(b1.op_checkpoint(), checkpoint_1);
 }
 
@@ -418,7 +420,7 @@ test "Cluster: repair: view-change, new-primary lagging behind checkpoint, trunc
     defer t.deinit();
 
     var c = t.clients(0, t.cluster.clients.len);
-    try c.request(checkpoint_trigger_1 - 1, checkpoint_trigger_1 - 1);
+    try c.request(checkpoint_1_trigger - 1, checkpoint_1_trigger - 1);
 
     var a0 = t.replica(.A0);
     var b1 = t.replica(.B1);
@@ -433,7 +435,7 @@ test "Cluster: repair: view-change, new-primary lagging behind checkpoint, trunc
     b2.drop(.__, .incoming, .prepare);
     b2.drop(.__, .incoming, .start_view);
 
-    try c.request(checkpoint_trigger_1, checkpoint_trigger_1);
+    try c.request(checkpoint_1_trigger, checkpoint_1_trigger);
     try expectEqual(a0.op_checkpoint(), checkpoint_1);
     try expectEqual(b1.op_checkpoint(), 0);
     try expectEqual(b2.op_checkpoint(), 0);
@@ -442,10 +444,10 @@ test "Cluster: repair: view-change, new-primary lagging behind checkpoint, trunc
     // trigger is committed.
     b1.drop(.__, .incoming, .prepare);
 
-    try c.request(checkpoint_trigger_1 + constants.pipeline_prepare_queue_max, checkpoint_trigger_1);
-    try expectEqual(a0.op_head(), checkpoint_trigger_1 + constants.pipeline_prepare_queue_max);
-    try expectEqual(b1.op_head(), checkpoint_trigger_1);
-    try expectEqual(b2.op_head(), checkpoint_trigger_1 - 1);
+    try c.request(checkpoint_1_trigger + constants.pipeline_prepare_queue_max, checkpoint_1_trigger);
+    try expectEqual(a0.op_head(), checkpoint_1_trigger + constants.pipeline_prepare_queue_max);
+    try expectEqual(b1.op_head(), checkpoint_1_trigger);
+    try expectEqual(b2.op_head(), checkpoint_1_trigger - 1);
 
     {
         // Now that A0 has a full pipeline past the checkpoint, allow B2 to advance its head via the
@@ -453,7 +455,7 @@ test "Cluster: repair: view-change, new-primary lagging behind checkpoint, trunc
         // its view_headers. Those SV headers have an op-max past the next checkpoint, so our
         // op_head does not increase beyond the checkpoint trigger.
         b2.pass(.__, .incoming, .start_view);
-        b2.corrupt(.{ .wal_prepare = checkpoint_trigger_1 - 1 });
+        b2.corrupt(.{ .wal_prepare = checkpoint_1_trigger - 1 });
 
         // We must receive a prepare to trigger a view_jump, which is what will trigger the RSV.
         // But don't send an ack, since that would allow A0 to send us the next prepare,
@@ -473,8 +475,8 @@ test "Cluster: repair: view-change, new-primary lagging behind checkpoint, trunc
 
         try expectEqual(b2.status(), .normal);
         try expectEqual(b2.op_checkpoint(), 0);
-        try expectEqual(b2.op_head(), checkpoint_trigger_1);
-        try expectEqual(b2.view_headers()[0].op, checkpoint_trigger_1 + constants.pipeline_prepare_queue_max);
+        try expectEqual(b2.op_head(), checkpoint_1_trigger);
+        try expectEqual(b2.view_headers()[0].op, checkpoint_1_trigger + constants.pipeline_prepare_queue_max);
     }
 
     // Take down A0 and allow a view-change.
