@@ -22,6 +22,7 @@ pub fn StateCheckerType(comptime Client: type, comptime Replica: type) type {
     return struct {
         const Self = @This();
 
+        node_count: u8,
         replica_count: u8,
 
         commits: Commits,
@@ -33,29 +34,30 @@ pub fn StateCheckerType(comptime Client: type, comptime Replica: type) type {
         /// The number of times the canonical state has been advanced.
         requests_committed: u64 = 0,
 
-        pub fn init(
-            allocator: mem.Allocator,
-            cluster: u32,
+        pub fn init(allocator: mem.Allocator, options: struct {
+            cluster_id: u32,
+            replica_count: u8,
             replicas: []const Replica,
             clients: []const Client,
-        ) !Self {
-            const root_prepare = vsr.Header.root_prepare(cluster);
+        }) !Self {
+            const root_prepare = vsr.Header.root_prepare(options.cluster_id);
 
             var commits = Commits.init(allocator);
             errdefer commits.deinit();
 
             var commit_replicas = ReplicaSet.initEmpty();
-            for (replicas) |_, i| commit_replicas.set(i);
+            for (options.replicas) |_, i| commit_replicas.set(i);
             try commits.append(.{
                 .header = root_prepare,
                 .replicas = commit_replicas,
             });
 
             return Self{
-                .replica_count = @intCast(u8, replicas.len),
+                .node_count = @intCast(u8, options.replicas.len),
+                .replica_count = options.replica_count,
                 .commits = commits,
-                .replicas = replicas,
-                .clients = clients,
+                .replicas = options.replicas,
+                .clients = options.clients,
             };
         }
 
@@ -66,6 +68,20 @@ pub fn StateCheckerType(comptime Client: type, comptime Replica: type) type {
         /// Returns whether the replica's state changed since the last check_state().
         pub fn check_state(state_checker: *Self, replica_index: u8) !void {
             const replica = &state_checker.replicas[replica_index];
+            if (replica.sync_stage != .none) {
+                // Allow a syncing replica to fast-forward its commit.
+                //
+                // But "fast-forwarding" may actually move commit_min slightly backwards:
+                // 1. Suppose op X is a checkpoint trigger.
+                // 2. We are committing op X-1 but are stuck due to a block that does not exist in
+                //    the cluster anymore.
+                // 3. When we sync, `commit_min` "backtracks", to `X - lsm_batch_multiple`.
+                const commit_min_source = state_checker.commit_mins[replica_index];
+                const commit_min_target = replica.commit_min;
+                assert(commit_min_source <= commit_min_target + constants.lsm_batch_multiple);
+                state_checker.commit_mins[replica_index] = replica.commit_min;
+                return;
+            }
 
             const commit_root = replica.superblock.working.vsr_state.commit_min_checksum;
 
@@ -135,14 +151,21 @@ pub fn StateCheckerType(comptime Client: type, comptime Replica: type) type {
 
         pub fn convergence(state_checker: *Self) bool {
             const a = state_checker.commits.items.len - 1;
-            for (state_checker.commit_mins[0..state_checker.replica_count]) |b| {
+            for (state_checker.commit_mins[0..state_checker.node_count]) |b| {
                 if (b != a) {
                     return false;
                 }
             }
 
+            const quorums = vsr.quorums(state_checker.replica_count);
             for (state_checker.commits.items) |commit, i| {
-                assert(commit.replicas.count() == state_checker.replica_count);
+                // Replica which state sync past commits will not be in the bitset.
+                if (state_checker.replica_count == 2) {
+                    // R=2 special-case; see "Cluster: sync: R=2".
+                    assert(commit.replicas.count() >= 1);
+                } else {
+                    assert(commit.replicas.count() >= quorums.replication);
+                }
                 assert(commit.header.command == .prepare);
                 assert(commit.header.op == i);
                 if (i > 0) {
