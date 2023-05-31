@@ -536,7 +536,13 @@ pub const Simulator = struct {
 
                     replica_storage.faulty = fault;
                     simulator.cluster.restart_replica(replica.replica) catch unreachable;
-                    assert(replica.status != .recovering_head or fault);
+
+                    if (replica.status == .recovering_head) {
+                        // Even with faults disabled, a replica that was syncing before its crashed
+                        // (or just recently finished syncing before it crash) may wind up in
+                        // status=recovering_head.
+                        assert(fault or replica.op < replica.op_checkpoint());
+                    }
 
                     replica_storage.faulty = true;
                     simulator.replica_stability[replica.replica] =
