@@ -511,7 +511,7 @@ pub const Simulator = struct {
                         continue;
                     }
 
-                    const fault = recoverable_count > recoverable_count_min or replica.standby();
+                    const fault = recoverable_count >= recoverable_count_min or replica.standby();
                     if (!fault) {
                         // The journal writes redundant headers of faulty ops as zeroes to ensure
                         // that they remain faulty after a crash/recover. Since that fault cannot
