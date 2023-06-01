@@ -20,6 +20,10 @@ clients may lag behind.
 * [tigerbeetle-cpp](https://github.com/kassane/tigerbeetle-cpp): TigerBeetle C++ Client
 * [tigerbeetle-rs](https://github.com/ZetaNumbers/tigerbeetle-rs): Safe bindings to TigerBeetle
 
+Need a client for Go, Java, Node.js, or .NET? We've got you covered
+with [first-party
+clients](https://github.com/tigerbeetledb/tigerbeetle/tree/main/src/clients).
+
 ## Other
 
 * [A Jepsen Test for TigerBeetle](https://github.com/nurturenature/jepsen-tigerbeetle)
