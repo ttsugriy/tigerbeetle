@@ -1,17 +1,20 @@
 # Community Projects
 
-This page is for projects developed by the community. They are not
-officially supported by TigerBeetle but we do our best to support them
-anyway!
-
 If you've made a project and would like to be featured here, open a
 pull request for this page!
 
-## Applications
+## Applications in the Wild
 
 * [Plain Text Accounting with TigerBeetle](https://github.com/pondersource/pta-tb-experiment#pta-tb-experiment)
 
-## Database Clients
+## Database Clients Made With :heart: By The Community
+
+They are not officially supported by TigerBeetle but we do our best to
+support them anyway!
+
+Keep in mind before our first release there will be frequent breaking
+changes. We integration-test all first-party clients but third-party
+clients may lag behind.
 
 * [tigerbeetlex](https://github.com/rbino/tigerbeetlex): An Elixir client for TigerBeetle
 * [tigerbeetle-cpp](https://github.com/kassane/tigerbeetle-cpp): TigerBeetle C++ Client
