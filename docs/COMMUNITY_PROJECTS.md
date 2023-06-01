@@ -1,5 +1,7 @@
 # Community Projects
 
+This page celebrates the incredible work done by community members. 😊
+
 If you've made a project and would like to be featured here, open a
 pull request for this page!
 
@@ -7,7 +9,7 @@ pull request for this page!
 
 * [Plain Text Accounting with TigerBeetle](https://github.com/pondersource/pta-tb-experiment#pta-tb-experiment)
 
-## Database Clients Made With :heart: By The Community
+## Database Clients Made With ❤️  By The Community
 
 They are not officially supported by TigerBeetle but we do our best to
 support them anyway!
