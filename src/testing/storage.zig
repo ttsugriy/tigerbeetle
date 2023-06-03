@@ -158,8 +158,6 @@ pub const Storage = struct {
         const sector_count = @divExact(size, constants.sector_size);
         const memory = try allocator.allocAdvanced(u8, constants.sector_size, size, .exact);
         errdefer allocator.free(memory);
-        // TODO: random data
-        mem.set(u8, memory, 0);
 
         var memory_written = try std.DynamicBitSetUnmanaged.initEmpty(allocator, sector_count);
         errdefer memory_written.deinit(allocator);
@@ -321,6 +319,17 @@ pub const Storage = struct {
         hash_log.emit_autohash(.{ read.buffer, read.zone, read.offset }, .DeepRecursive);
 
         const offset_in_storage = read.zone.offset(read.offset);
+
+        // Sectors not yet written to return garbage data.
+        var sectors = SectorRange.from_zone(read.zone, read.offset, read.buffer.len);
+        while (sectors.next()) |sector| {
+            if (!storage.memory_written.isSet(sector)) {
+                assert(read.zone == .grid);
+                const sector_start = offset_in_storage + sector * constants.sector_size;
+                storage.prng.fill(storage.memory[sector_start..][0..constants.sector_size]);
+            }
+        }
+
         stdx.copy_disjoint(
             .exact,
             u8,
@@ -334,7 +343,7 @@ pub const Storage = struct {
 
         if (storage.faulty) {
             // Corrupt faulty sectors.
-            var sectors = SectorRange.from_zone(read.zone, read.offset, read.buffer.len);
+            sectors = SectorRange.from_zone(read.zone, read.offset, read.buffer.len);
             const sectors_min = sectors.min;
             while (sectors.next()) |sector| {
                 if (storage.faults.isSet(sector)) {
